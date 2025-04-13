@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
-# configs.py - Central configuration hub
+"""Central configuration hub for risk models."""
+
+import os
+from pathlib import Path
+
+# Root directory 
+ROOT_DIR = Path(__file__).parent.parent.parent
 
 # Path configurations
-DATASET_PATH = 'data/german_credit.csv'
-MODEL_SAVE_PATH = 'models/hybrid_credit_model.pkl'
+DATASET_PATH = os.path.join(ROOT_DIR, 'data', 'german_credit.csv')
+MODEL_SAVE_PATH = os.path.join(ROOT_DIR, 'models', 'hybrid_credit_model.pkl')
 
 # Feature engineering
 NUM_FEATURES = 8
@@ -40,4 +46,4 @@ HYPERPARAMETERS = {
 RANDOM_STATE = 42
 SPLIT_RANDOM_STATE = 43
 TEST_SIZE = 0.2
-N_BOOTSTRAP_ITERATIONS = 1000
+N_BOOTSTRAP_ITERATIONS = 1000 

@@ -1,16 +1,24 @@
-# -*- coding: utf-8 -*-
-# dataset.py - Data loading and preprocessing
+"""Data loading and preprocessing utilities."""
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 from imblearn.combine import SMOTEENN
-from configs import (DATASET_PATH, CATEGORICAL_FEATURES,
+
+from risk_models.config import (DATASET_PATH, CATEGORICAL_FEATURES,
                      RANDOM_STATE, TEST_SIZE, SPLIT_RANDOM_STATE)
 
 
 def adapt_to_small_business(df):
+    """Adapt dataset to small business context.
+    
+    Args:
+        df: Input dataframe
+        
+    Returns:
+        Transformed dataframe with business features
+    """
     df['Business_Age'] = df['Age'].apply(lambda x: max(0, x - 22))
     df['Employees'] = df['Job'].map({
         0: '1-5', 1: '1-5', 2: '5-10', 3: '10-20'
@@ -25,6 +33,14 @@ def adapt_to_small_business(df):
 
 
 def create_risk_label(df):
+    """Create risk labels based on financial and account data.
+    
+    Args:
+        df: Input dataframe
+        
+    Returns:
+        Dataframe with risk labels
+    """
     df['Saving accounts'] = df['Saving accounts'].fillna('unknown')
     df['Checking account'] = df['Checking account'].fillna('unknown')
 
@@ -51,6 +67,11 @@ def create_risk_label(df):
 
 
 def preprocess_data():
+    """Load and preprocess the credit risk dataset.
+    
+    Returns:
+        X_train, X_test, y_train, y_test: Train-test split of features and labels
+    """
     df = pd.read_csv(DATASET_PATH, index_col=0)
     df = adapt_to_small_business(df)
     df = create_risk_label(df)
@@ -81,4 +102,4 @@ def preprocess_data():
         test_size=TEST_SIZE,
         stratify=y_res,
         random_state=SPLIT_RANDOM_STATE
-    )
+    ) 

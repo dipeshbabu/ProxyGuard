@@ -1,19 +1,28 @@
-# -*- coding: utf-8 -*-
-# eval.py - Evaluation and interpretation
+"""Model evaluation metrics and visualization utilities."""
 
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (accuracy_score, precision_score, recall_score,
                              f1_score, roc_auc_score, confusion_matrix)
-import shap
 import matplotlib.pyplot as plt
 import seaborn as sns
 import shap
 import scipy.stats as stats
-from configs import RANDOM_STATE, N_BOOTSTRAP_ITERATIONS
+
+from risk_models.config import RANDOM_STATE, N_BOOTSTRAP_ITERATIONS
 
 
 def analyze_performance(y_true, y_pred, model_name):
+    """Analyze model performance using various metrics.
+    
+    Args:
+        y_true: True labels
+        y_pred: Predicted labels
+        model_name: Name of the model for display
+        
+    Returns:
+        Dictionary of performance metrics
+    """
     metrics = {
         'Accuracy': accuracy_score(y_true, y_pred),
         'Precision': precision_score(y_true, y_pred),
@@ -32,6 +41,18 @@ def analyze_performance(y_true, y_pred, model_name):
 
 
 def bootstrap_metric_comparison(y_true, y_pred1, y_pred2, metric_func, n_iterations=N_BOOTSTRAP_ITERATIONS):
+    """Compare two models using bootstrap sampling.
+    
+    Args:
+        y_true: True labels
+        y_pred1: Predictions from model 1
+        y_pred2: Predictions from model 2
+        metric_func: Metric function to compare
+        n_iterations: Number of bootstrap iterations
+        
+    Returns:
+        t-stat, p-value, confidence interval bounds, and mean difference
+    """
     np.random.seed(RANDOM_STATE)
     metric_diffs = []
 
@@ -57,6 +78,12 @@ def bootstrap_metric_comparison(y_true, y_pred1, y_pred2, metric_func, n_iterati
 
 
 def interpret_shap(model, X):
+    """Interpret model using SHAP values.
+    
+    Args:
+        model: Trained model
+        X: Feature matrix
+    """
     X_mod = X.copy()
     if model.use_segmentation and 'Segment' not in X_mod.columns:
         try:
@@ -83,7 +110,12 @@ def interpret_shap(model, X):
 
 
 def interpret_results(metrics, model_name):
-    """Print a textual interpretation of model performance."""
+    """Print a textual interpretation of model performance.
+    
+    Args:
+        metrics: Dictionary of performance metrics
+        model_name: Name of the model for display
+    """
     print(f"--- {model_name} Performance Summary ---")
     print(f"Accuracy: {metrics['Accuracy']:.2f}")
     print(f"Precision: {metrics['Precision']:.2f}")
@@ -97,6 +129,12 @@ def interpret_results(metrics, model_name):
 
 
 def plot_comparative_metrics(results_list, metric_name):
+    """Plot comparative metrics across multiple models.
+    
+    Args:
+        results_list: List of dictionaries with model results
+        metric_name: Name of the metric to compare
+    """
     labels = [res['Model'] for res in results_list]
     values = [res[metric_name] for res in results_list]
     times = [res['Time'] for res in results_list]
@@ -111,4 +149,4 @@ def plot_comparative_metrics(results_list, metric_name):
     plt.xlabel("Model Configuration")
     plt.ylabel(metric_name)
     plt.ylim(0, 1)
-    plt.show()
+    plt.show() 
