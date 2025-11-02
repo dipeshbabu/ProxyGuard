@@ -1,20 +1,29 @@
-# -*- coding: utf-8 -*-
-# dataset.py - Data loading and preprocessing
-
+# dataset.py (leakage-safe derived label)
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OrdinalEncoder, StandardScaler
-from imblearn.combine import SMOTEENN
-from configs import (DATASET_PATH, CATEGORICAL_FEATURES,
-                     RANDOM_STATE, TEST_SIZE, SPLIT_RANDOM_STATE)
+from sklearn.preprocessing import OrdinalEncoder
+
+# Columns that define the derived label or are direct transforms of them
+LEAK_RAW = [
+    'Credit amount', 'Duration',           # used in credit_ratio
+    'Monthly_Revenue',                     # = Credit amount / Duration
+    'Job', 'Employees',                    # Employees derived from Job
+    'Business_Type',                       # derived from Credit amount
+    'Saving accounts', 'Checking account',  # used directly in rule
+    'Purpose'                              # used directly in rule (before OHE)
+]
+LEAK_PREFIXES = [
+    'Purpose_',        # OHE of Purpose
+    'Employees_',      # OHE of Employees
+    'Business_Type_'   # OHE of Business_Type
+]
 
 
-def adapt_to_small_business(df):
+def adapt_to_small_business(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     df['Business_Age'] = df['Age'].apply(lambda x: max(0, x - 22))
-    df['Employees'] = df['Job'].map({
-        0: '1-5', 1: '1-5', 2: '5-10', 3: '10-20'
-    }).astype('category')
+    df['Employees'] = df['Job'].map(
+        {0: '1-5', 1: '1-5', 2: '5-10', 3: '10-20'}).astype('category')
     df['Monthly_Revenue'] = df['Credit amount'] / df['Duration'].replace(0, 1)
     df['Business_Type'] = pd.cut(
         df['Credit amount'],
@@ -24,61 +33,79 @@ def adapt_to_small_business(df):
     return df
 
 
-def create_risk_label(df):
-    df['Saving accounts'] = df['Saving accounts'].fillna('unknown')
-    df['Checking account'] = df['Checking account'].fillna('unknown')
-
-    savings_order = {'unknown': 0, 'little': 1,
-                     'moderate': 2, 'quite rich': 3, 'rich': 4}
-    checking_order = {'unknown': 0, 'little': 1, 'moderate': 2, 'rich': 3}
-
-    df['credit_ratio'] = df['Credit amount'] / \
-        df['Duration'].replace(0, np.nan)
-    df['credit_ratio'] = df['credit_ratio'].fillna(df['credit_ratio'].mean())
-    df['account_mismatch'] = abs(
-        df['Saving accounts'].map(savings_order) -
-        df['Checking account'].map(checking_order)
-    )
-
-    risk_conditions = (
-        (df['credit_ratio'] > 500) |
-        (df['account_mismatch'] > 2) |
-        (df['Job'] < 1) |
-        (df['Purpose'].isin(['radio/TV', 'education']))
-    )
-    df['Risk'] = np.where(risk_conditions, 1, 0)
-    return df.drop(['credit_ratio', 'account_mismatch'], axis=1)
+def create_risk_label(df: pd.DataFrame, top_frac: float = 0.35) -> pd.DataFrame:
+    """
+    Derive Risk from the upper quantile of credit_ratio only (no accounts/purpose/job in rule).
+    This avoids dropping too many useful predictors later.
+    """
+    df = df.copy()
+    df['credit_ratio'] = df['Credit amount'] / df['Duration'].replace(0, 1)
+    thr = df['credit_ratio'].quantile(1.0 - top_frac)  # e.g., top 30% = risky
+    df['Risk'] = (df['credit_ratio'] >= thr).astype(int)
+    return df.drop(columns=['credit_ratio'])
 
 
-def preprocess_data():
-    df = pd.read_csv(DATASET_PATH, index_col=0)
-    df = adapt_to_small_business(df)
-    df = create_risk_label(df)
+# Features to drop to prevent leakage (parents of the label and their direct transforms)
+LEAK_RAW = [
+    # parents / direct function of parents
+    'Credit amount', 'Duration', 'Monthly_Revenue'
+]
+LEAK_PREFIXES = [
+    'Business_Type_'  # derived deterministically from Credit amount
+]
 
-    # Encoding
-    for col, cats in CATEGORICAL_FEATURES.items():
-        if col in ['Saving accounts', 'Checking account']:
-            encoder = OrdinalEncoder(
-                categories=[cats], handle_unknown='use_encoded_value', unknown_value=-1)
-            df[col] = encoder.fit_transform(df[[col]])
 
-    df = pd.get_dummies(df, columns=['Sex', 'Housing', 'Purpose', 'Employees', 'Business_Type'],
-                        drop_first=False, dummy_na=True)
+def preprocess_data(filepath: str):
+    df = pd.read_csv(filepath, index_col=0)
 
-    # Numeric features
-    numeric_features = ['Business_Age',
-                        'Credit amount', 'Duration', 'Monthly_Revenue']
-    df[numeric_features] = StandardScaler().fit_transform(df[numeric_features])
-    df = df.fillna(df.mean())
+    # business adds (OK to keep; we will drop the leaking ones below)
+    df['Business_Age'] = df['Age'].apply(lambda x: max(0, x - 22))
+    df['Employees'] = df['Job'].map(
+        {0: '1-5', 1: '1-5', 2: '5-10', 3: '10-20'}).astype('category')
+    df['Monthly_Revenue'] = df['Credit amount'] / df['Duration'].replace(0, 1)
+    df['Business_Type'] = pd.cut(df['Credit amount'], bins=[0, 5000, 20000, np.inf],
+                                 labels=['Micro', 'Small', 'Medium'])
 
-    # Balance classes
+    # derive label only from credit_ratio quantile
+    df = create_risk_label(df, top_frac=0.30)
+
+    # minimal cleaning/encoding (DO NOT use these in the label)
+    df['Saving accounts'] = df['Saving accounts'].fillna('NaN')
+    df['Checking account'] = df['Checking account'].fillna('NaN')
+    cat_spec = {
+        'Saving accounts': ['NaN', 'little', 'moderate', 'quite rich', 'rich'],
+        'Checking account': ['NaN', 'little', 'moderate', 'rich'],
+    }
+    from sklearn.preprocessing import OrdinalEncoder
+    for col in ['Saving accounts', 'Checking account']:
+        enc = OrdinalEncoder(categories=[cat_spec[col]],
+                             handle_unknown='use_encoded_value', unknown_value=np.nan)
+        df[col] = enc.fit_transform(df[[col]])
+
+    df = pd.get_dummies(df,
+                        columns=['Sex', 'Housing', 'Purpose',
+                                 'Employees', 'Business_Type'],
+                        dummy_na=True, drop_first=False)
+
+    leak_parents = [
+        'Credit amount', 'Duration',
+        'Saving accounts', 'Checking account',
+    ]
+    leak_parents_oh = [c for c in df.columns if c.startswith('Purpose_')]
+    df = df.drop(columns=[c for c in leak_parents +
+                          leak_parents_oh if c in df.columns], errors='ignore')
+
+    # df = df.dropna()
+
+    # Build X then drop leakage columns
     X = df.drop('Risk', axis=1)
-    y = df['Risk']
-    X_res, y_res = SMOTEENN(random_state=RANDOM_STATE).fit_resample(X, y)
+    to_drop = [c for c in LEAK_RAW if c in X.columns]
+    to_drop += [c for c in X.columns if any(c.startswith(p)
+                                            for p in LEAK_PREFIXES)]
+    X = X.drop(columns=to_drop, errors='ignore')
 
-    return train_test_split(
-        X_res, y_res,
-        test_size=TEST_SIZE,
-        stratify=y_res,
-        random_state=SPLIT_RANDOM_STATE
-    )
+    y = df['Risk'].astype(int)
+
+    # Numeric columns left (for scalers, etc.)
+    numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+    return X, y, numeric_cols

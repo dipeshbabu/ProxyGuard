@@ -1,43 +1,11 @@
-# -*- coding: utf-8 -*-
-# configs.py - Central configuration hub
-
-# Path configurations
-DATASET_PATH = 'data/german_credit.csv'
-MODEL_SAVE_PATH = 'models/hybrid_credit_model.pkl'
-
-# Feature engineering
-NUM_FEATURES = 8
-N_CLUSTERS = 3
-CATEGORICAL_FEATURES = {
-    'Saving accounts': ['unknown', 'little', 'moderate', 'quite rich', 'rich'],
-    'Checking account': ['unknown', 'little', 'moderate', 'rich'],
-    'Sex': ['male', 'female'],
-    'Housing': ['own', 'rent', 'free'],
-    'Purpose': ['car', 'furniture/equipment', 'radio/TV',
-                'domestic appliances', 'repairs', 'education',
-                'business', 'vacation/others']
-}
-
-# Model parameters
-HYPERPARAMETERS = {
-    'xgb': {
-        'n_estimators': 100,
-        'max_depth': 3,
-        'learning_rate': 0.01,
-        'subsample': 0.8,
-        'colsample_bytree': 0.8,
-        'eval_metric': 'logloss',
-        'random_state': 42,
-        'n_jobs': -1
-    },
-    'sampler': {
-        'feature_selector_reads': 1000,
-        'segmenter_reads': 100
-    }
-}
-
-# Experiment settings
-RANDOM_STATE = 42
-SPLIT_RANDOM_STATE = 43
-TEST_SIZE = 0.2
-N_BOOTSTRAP_ITERATIONS = 1000
+# configs.py
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "2")
+SEED = 3407
+DATA_PATH = r"data/german_credit.csv"
+XGB_KW = dict(n_estimators=150, max_depth=3, learning_rate=0.05,
+              subsample=0.8, eval_metric='logloss', random_state=SEED)
+METRICS_PNG = "metrics_comparison.png"
+RESULTS_CSV = "table1_results.csv"
+RESULTS_TEX = "table1_results.tex"
+BEST_MODEL_PKL = "best_risk_model.pkl"
