@@ -1,207 +1,203 @@
-# main.py
-from eval import ModelEvaluator, ResultVisualizer
-from model import SmallDataCreditPipeline
-from dataset import preprocess_data
-from configs import (
-    DATA_PATH, RESULTS_CSV, RESULTS_TEX, METRICS_PNG, BEST_MODEL_PKL, SEED
-)
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
+import argparse
+from pathlib import Path
+from typing import Iterable, List
+
 import pandas as pd
-import numpy as np
-import joblib
-import time
-import warnings
-warnings.filterwarnings("ignore")
+
+from risk_models.configs import (
+    DATASET_REGISTRY,
+    ExperimentConfig,
+    clone_dataset_config,
+    clone_experiment_config,
+    get_ablation_model_configs,
+    get_benchmark_model_configs,
+    get_dataset_config,
+    get_default_experiment_config,
+)
+from risk_models.cv_runner import run_ablation_suite, run_benchmark
+from risk_models.diagnostics import warn_if_suspicious_metrics
 
 
-# -----------------------
-# Experiment toggles
-# -----------------------
-USE_PSEUDO_LABELS = False     # set False to disable pseudo-labeling in the pipeline
-RUN_SANITY_CHECKS = True      # shuffle-label & high-score leakage warnings
-RELIABILITY_MODELS = [
-    "Small-Data Pipeline (Full)", "XGBoost Baseline"
-]
+def _resolve_datasets(dataset_arg: str) -> List[str]:
+    if dataset_arg == "all":
+        return sorted(DATASET_REGISTRY)
+    return [dataset_arg]
 
 
-def _warn_if_suspicious(metrics_row: dict, name: str, auc_hi=0.98, acc_hi=0.98):
-    """Heuristics to flag likely leakage/overfit."""
-    auc = metrics_row.get("AUC", np.nan)
-    acc = metrics_row.get("Accuracy", np.nan)
-    ece = metrics_row.get(
-        "ECE (10-bin)", np.nan) or metrics_row.get("ECE", np.nan)
-    if (auc >= auc_hi and acc >= acc_hi) or (auc >= 0.999):
-        print(f"[warning] {name}: extremely high AUC/Accuracy ({auc:.3f}/{acc:.3f}). "
-              "This often indicates leakage when labels are derived from predictors.")
-    if np.isfinite(ece) and ece < 0.02 and auc > 0.95:
-        print(f"[note] {name}: very low ECE with very high AUC ({auc:.3f}). "
-              "Double-check that no label-defining features leak into X.")
-
-
-def _shuffle_label_sanity(model, X_train, y_train, X_test, y_test, name="Model"):
-    """Train/evaluate with shuffled labels to gauge baseline; AUC should ~ 0.5."""
-    y_shuf = y_train.sample(frac=1.0, random_state=SEED).reset_index(drop=True)
-    X_tr = X_train.reset_index(drop=True)
-    try:
-        start = time.time()
-        model.fit(X_tr, y_shuf)
-        dur = time.time() - start
-        from sklearn.metrics import roc_auc_score
-        y_prob = model.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, y_prob)
-        print(
-            f"[sanity] {name} (shuffle-label): AUC={auc:.3f} | TrainTime={dur:.2f}s")
-        if auc > 0.6:
-            print("  -> AUC > 0.6 on shuffled labels is suspicious. Check leakage/bugs.")
-    except Exception as e:
-        print(f"[sanity] {name} (shuffle-label) failed: {e}")
-
-
-def _build_models(scale_pos_weight: float):
-    """Define models inline with class-imbalance handling."""
-    models = {
-        'Small-Data Pipeline (Full)': SmallDataCreditPipeline(use_all_techniques=True),
-        'Small-Data Pipeline (Basic)': SmallDataCreditPipeline(use_all_techniques=False),
-        'XGBoost Baseline': XGBClassifier(
-            n_estimators=300,
-            max_depth=4,
-            learning_rate=0.05,
-            subsample=0.9,
-            colsample_bytree=0.9,
-            random_state=SEED,
-            scale_pos_weight=scale_pos_weight,
-            eval_metric='logloss'
-        ),
-        'Random Forest': RandomForestClassifier(
-            n_estimators=400,
-            max_depth=None,
-            class_weight='balanced',
-            random_state=SEED
-        ),
-        'Logistic Regression': LogisticRegression(
-            max_iter=2000,
-            class_weight='balanced',
-            solver='liblinear',
-            random_state=SEED
-        ),
-    }
-    return models
-
-
-def run_experiment(data_path: str = DATA_PATH):
-    # -----------------------
-    # Load & split
-    # -----------------------
-    X, y, numeric_cols = preprocess_data(data_path)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=SEED
+def _build_experiment_config(args) -> ExperimentConfig:
+    base = get_default_experiment_config()
+    return clone_experiment_config(
+        base,
+        n_repeats=args.repeats,
+        output_root=args.output_root,
+        calibration_method=args.calibration_method,
+        save_shap=args.save_shap,
+        save_reliability=not args.no_reliability,
+        run_subgroups=not args.no_subgroups,
+        run_weak_label_sensitivity=args.mode == "weak_label",
     )
 
-    # Class-imbalance handling params for baselines
-    pos = int((y_train == 1).sum())
-    neg = int((y_train == 0).sum())
-    scale_pos_weight = float(max(1.0, neg / max(1, pos)))
 
-    # Build an unlabeled split from training for pseudo-labeling demos
-    if USE_PSEUDO_LABELS:
-        X_train_labeled, X_unlabeled, y_train_labeled, _ = train_test_split(
-            X_train, y_train, test_size=0.3, stratify=y_train, random_state=SEED
+def _print_summary(result_bundle):
+    aggregate = result_bundle["aggregate_metrics"]
+    if aggregate.empty:
+        print("No aggregate metrics were produced.")
+        return
+    summary_cols = [col for col in ["Model", "AUC", "ECE (10-bin)", "FeatureCount"] if col in aggregate.columns]
+    ranked = aggregate.sort_values("AUC", ascending=False)
+    print(ranked[summary_cols].to_string(index=False))
+    for _, row in ranked.iterrows():
+        warnings = warn_if_suspicious_metrics(
+            {
+                "AUC": row.get("AUC"),
+                "ECE": row.get("ECE (10-bin)"),
+                "Accuracy": row.get("Accuracy"),
+            },
+            row["Model"],
         )
-    else:
-        X_train_labeled, y_train_labeled = X_train, y_train
-        X_unlabeled = None
+        for warning in warnings:
+            print(f"[warning] {warning}")
+    output_dir = result_bundle.get("output_dir")
+    if output_dir:
+        print(f"[artifacts] {output_dir}")
+    subgroup_metrics = result_bundle.get("subgroup_metrics")
+    if isinstance(subgroup_metrics, pd.DataFrame) and not subgroup_metrics.empty:
+        print(f"[subgroups] rows={len(subgroup_metrics)}")
+    feature_stability = result_bundle.get("feature_stability")
+    if isinstance(feature_stability, pd.DataFrame) and not feature_stability.empty:
+        print(f"[stability] rows={len(feature_stability)}")
 
-    # -----------------------
-    # Train & evaluate
-    # -----------------------
-    models = _build_models(scale_pos_weight)
-    evaluator = ModelEvaluator()
-    results_rows = []
 
-    for name, model in models.items():
-        print(f"\n=== Training {name} ===")
-        start = time.time()
+def run_benchmark_mode(args):
+    exp_config = _build_experiment_config(args)
+    model_configs = get_benchmark_model_configs()
+    for dataset_name in _resolve_datasets(args.dataset):
+        dataset_config = get_dataset_config(dataset_name)
+        result_bundle = run_benchmark(dataset_config, model_configs, exp_config, mode="benchmark")
+        print(f"\nBenchmark results for {dataset_name}:")
+        _print_summary(result_bundle)
 
-        if isinstance(model, SmallDataCreditPipeline):
-            model.fit(X_train_labeled, y_train_labeled,
-                      X_unlabeled if USE_PSEUDO_LABELS else None)
-        else:
-            model.fit(X_train, y_train)
 
-        train_time = time.time() - start
+def run_ablation_mode(args):
+    exp_config = _build_experiment_config(args)
+    for dataset_name in _resolve_datasets(args.dataset):
+        dataset_config = get_dataset_config(dataset_name)
+        result_bundle = run_ablation_suite(dataset_config, exp_config)
+        print(f"\nAblation results for {dataset_name}:")
+        _print_summary(result_bundle)
 
-        metrics = evaluator.evaluate(
-            model, X_train, y_train, X_test, y_test, name)
-        metrics['Train Time (s)'] = train_time
-        results_rows.append(metrics)
 
-        # quick leakage/overfit heuristic
-        _warn_if_suspicious(metrics, name)
+def _weak_label_variants(dataset_config):
+    label_params = dict(dataset_config.label_params)
+    return [
+        ("baseline", dataset_config),
+        (
+            "top_frac_25",
+            clone_dataset_config(dataset_config, label_params={**label_params, "top_frac": 0.25}),
+        ),
+        (
+            "top_frac_35",
+            clone_dataset_config(dataset_config, label_params={**label_params, "top_frac": 0.35}),
+        ),
+        (
+            "threshold_shift_up",
+            clone_dataset_config(dataset_config, label_params={**label_params, "threshold_shift": 0.05}),
+        ),
+        (
+            "threshold_shift_down",
+            clone_dataset_config(dataset_config, label_params={**label_params, "threshold_shift": -0.05}),
+        ),
+        (
+            "label_noise_05",
+            clone_dataset_config(dataset_config, label_params={**label_params, "noise_rate": 0.05}),
+        ),
+        (
+            "label_noise_10",
+            clone_dataset_config(dataset_config, label_params={**label_params, "noise_rate": 0.10}),
+        ),
+        (
+            "proxy_drop",
+            clone_dataset_config(
+                dataset_config,
+                drop_columns=["Saving accounts", "Checking account", "Job", "Business_Age"],
+            ),
+        ),
+    ]
 
-        # optional shuffle-label sanity test (uses a *fresh* model instance)
-        if RUN_SANITY_CHECKS:
-            try:
-                if isinstance(model, SmallDataCreditPipeline):
-                    sm = SmallDataCreditPipeline(
-                        use_all_techniques=model.use_all_techniques)
-                else:
-                    # re-create a similar estimator
-                    sm = type(model)(**getattr(model, "get_params", lambda: {})()) \
-                        if hasattr(model, "get_params") else type(model)()
-                _shuffle_label_sanity(
-                    sm, X_train, y_train, X_test, y_test, name)
-            except Exception as e:
-                print(f"[sanity] Could not reinstantiate {name}: {e}")
 
-    # -----------------------
-    # Save tables / plots
-    # -----------------------
-    results_df = pd.DataFrame(results_rows).set_index('Model')
-    results_df_sorted = results_df.sort_values('AUC', ascending=False)
-    results_df_sorted.to_csv(RESULTS_CSV)
+def run_weak_label_mode(args):
+    selected = _resolve_datasets(args.dataset)
+    invalid = [dataset_name for dataset_name in selected if dataset_name != "german_credit"]
+    if invalid:
+        invalid_list = ", ".join(invalid)
+        raise ValueError(
+            f"Weak-label mode is only supported for 'german_credit'. Received: {invalid_list}"
+        )
 
-    latex_cols = ['AUC', 'AUPRC', 'Accuracy', 'F1', 'F1@t*',
-                  't*', 'Precision', 'Recall', 'Brier', 'ECE (10-bin)']
-    latex_cols = [c for c in latex_cols if c in results_df_sorted.columns]
-    latex_df = results_df_sorted[latex_cols].round(3)
-    with open(RESULTS_TEX, 'w') as f:
-        f.write(latex_df.to_latex(index=True,
-                                  caption='Small-data results on German Credit (n=1000).',
-                                  label='tab:small_data', escape=False))
+    exp_config = _build_experiment_config(args)
+    model_configs = get_benchmark_model_configs()
+    all_results = []
+    for dataset_name in selected:
+        base_config = get_dataset_config(dataset_name)
+        for variant_name, variant_config in _weak_label_variants(base_config):
+            result_bundle = run_benchmark(
+                variant_config,
+                model_configs,
+                exp_config,
+                mode=f"weak_label/{variant_name}",
+            )
+            aggregate = result_bundle["aggregate_metrics"].copy()
+            aggregate.insert(0, "Variant", variant_name)
+            all_results.append(aggregate)
+            print(f"\nWeak-label results for {dataset_name} [{variant_name}]:")
+            _print_summary(result_bundle)
 
-    print("\nFinal Results:")
-    print(results_df_sorted)
+    if all_results:
+        combined = pd.concat(all_results, ignore_index=True)
+        output_path = Path(exp_config.output_root) / "weak_label" / "weak_label_summary.csv"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        combined.to_csv(output_path, index=False)
+        print(f"\nSaved weak-label summary to {output_path}")
 
-    viz = ResultVisualizer()
-    viz.plot_metrics_comparison(results_df.reset_index(), out_path=METRICS_PNG)
 
-    for label in RELIABILITY_MODELS:
-        if label in models:
-            mdl = models[label]
-            try:
-                y_prob = mdl.predict_proba(X_test)[:, 1]
-                safe = label.replace(' ', '_').replace(
-                    '(', '').replace(')', '')
-                viz.plot_reliability(y_test, y_prob, name=safe)
-            except Exception as e:
-                print(f"[reliability] {label}: {e}")
+def run_debug_mode(args):
+    exp_config = _build_experiment_config(args)
+    exp_config = clone_experiment_config(exp_config, n_repeats=1, save_shap=False)
+    model_configs = get_benchmark_model_configs()[:3]
+    dataset_name = _resolve_datasets(args.dataset)[0]
+    dataset_config = get_dataset_config(dataset_name)
+    result_bundle = run_benchmark(dataset_config, model_configs, exp_config, mode="debug")
+    print(f"\nDebug results for {dataset_name}:")
+    _print_summary(result_bundle)
 
-    # SHAP summary (skip safely inside viz if unsupported)
-    for name in models:
-        try:
-            viz.plot_shap_summary(models[name], X_test, name)
-        except Exception:
-            pass
 
-    best_model_name = results_df['AUC'].idxmax()
-    joblib.dump(models[best_model_name], BEST_MODEL_PKL)
-    print(f"[done] wrote results & artifacts. Best model: {best_model_name}")
-    return results_df_sorted
+def build_parser():
+    parser = argparse.ArgumentParser(description="Small-data credit risk benchmark runner.")
+    parser.add_argument("--mode", choices=["benchmark", "ablation", "weak_label", "debug"], default="benchmark")
+    parser.add_argument("--dataset", default="german_credit", help="Dataset name or 'all'.")
+    parser.add_argument("--repeats", type=int, default=10, help="Number of repeated outer splits.")
+    parser.add_argument("--output-root", default=str(Path("outputs")), help="Root directory for experiment outputs.")
+    parser.add_argument("--calibration-method", default="temperature", choices=["temperature", "none"])
+    parser.add_argument(
+        "--save-shap",
+        action="store_true",
+        help="Reserved for future SHAP artifact export; model-level SHAP hooks exist but runner export is not enabled yet.",
+    )
+    parser.add_argument("--no-reliability", action="store_true", help="Skip reliability diagram generation.")
+    parser.add_argument("--no-subgroups", action="store_true", help="Skip subgroup metrics.")
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
+    mode_handlers = {
+        "benchmark": run_benchmark_mode,
+        "ablation": run_ablation_mode,
+        "weak_label": run_weak_label_mode,
+        "debug": run_debug_mode,
+    }
+    mode_handlers[args.mode](args)
 
 
 if __name__ == "__main__":
-    run_experiment()
+    main()
