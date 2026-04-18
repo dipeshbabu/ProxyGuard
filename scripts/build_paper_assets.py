@@ -37,6 +37,10 @@ DISPLAY_DATASETS = {
 }
 
 
+class LatexRaw(str):
+    pass
+
+
 def read_csv_if_exists(path: Path) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
@@ -58,6 +62,21 @@ def collect_aggregate_tables(output_root: Path, mode: str) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
+def collect_split_tables(output_root: Path, mode: str) -> pd.DataFrame:
+    rows = []
+    mode_dir = output_root / mode
+    if not mode_dir.exists():
+        return pd.DataFrame()
+    for dataset_dir in sorted(path for path in mode_dir.iterdir() if path.is_dir()):
+        split_metrics = read_csv_if_exists(dataset_dir / "split_metrics.csv")
+        if split_metrics.empty:
+            continue
+        split_metrics.insert(0, "Dataset", dataset_dir.name)
+        split_metrics.insert(1, "Run", mode)
+        rows.append(split_metrics)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+
 def collect_legacy_aggregate_tables(dataset_root: Path, run_label: str) -> pd.DataFrame:
     rows = []
     if not dataset_root.exists():
@@ -72,12 +91,37 @@ def collect_legacy_aggregate_tables(dataset_root: Path, run_label: str) -> pd.Da
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
+def collect_legacy_split_tables(dataset_root: Path, run_label: str) -> pd.DataFrame:
+    rows = []
+    if not dataset_root.exists():
+        return pd.DataFrame()
+    for dataset_dir in sorted(path for path in dataset_root.iterdir() if path.is_dir()):
+        split_metrics = read_csv_if_exists(dataset_dir / "split_metrics.csv")
+        if split_metrics.empty:
+            continue
+        split_metrics.insert(0, "Dataset", dataset_dir.name)
+        split_metrics.insert(1, "Run", run_label)
+        rows.append(split_metrics)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+
 def prefer_primary(primary: pd.DataFrame, fallback: pd.DataFrame) -> pd.DataFrame:
     if primary.empty:
         return fallback
     if fallback.empty:
         return primary
     key = ["Dataset", "Model"]
+    primary_keys = set(map(tuple, primary[key].to_numpy()))
+    fallback_keep = fallback[~fallback[key].apply(tuple, axis=1).isin(primary_keys)]
+    return pd.concat([primary, fallback_keep], ignore_index=True)
+
+
+def prefer_primary_splits(primary: pd.DataFrame, fallback: pd.DataFrame) -> pd.DataFrame:
+    if primary.empty:
+        return fallback
+    if fallback.empty:
+        return primary
+    key = ["Dataset", "Model", "split_seed"]
     primary_keys = set(map(tuple, primary[key].to_numpy()))
     fallback_keep = fallback[~fallback[key].apply(tuple, axis=1).isin(primary_keys)]
     return pd.concat([primary, fallback_keep], ignore_index=True)
@@ -92,11 +136,19 @@ def build_summary_table(calibrated: pd.DataFrame) -> pd.DataFrame:
         "AUC",
         "AUC_ci95",
         "AUPRC",
+        "AUPRC_ci95",
         "Brier",
+        "Brier_ci95",
         "ECE (10-bin)",
+        "ECE (10-bin)_ci95",
         "LogLoss",
+        "LogLoss_ci95",
         "CalibrationSlope",
+        "CalibrationSlope_ci95",
         "FeatureCount",
+        "TrainTimeSec",
+        "InferenceTimeSec",
+        "PeakMemoryMB",
         "n_splits",
     ]
     present = [col for col in cols if col in calibrated.columns]
@@ -122,12 +174,29 @@ def build_calibration_delta(calibrated: pd.DataFrame, uncalibrated: pd.DataFrame
 
 
 def collect_weak_label_summary(output_root: Path) -> pd.DataFrame:
-    weak_summary = read_csv_if_exists(output_root / "weak_label" / "weak_label_summary.csv")
+    rows = []
+    for root in [output_root / "weak_label", Path("outputs") / "weak_label"]:
+        if not root.exists():
+            continue
+        for variant_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+            for dataset_dir in sorted(path for path in variant_dir.iterdir() if path.is_dir()):
+                aggregate = read_csv_if_exists(dataset_dir / "aggregate_metrics.csv")
+                if aggregate.empty:
+                    continue
+                aggregate.insert(0, "Variant", variant_dir.name)
+                aggregate.insert(0, "Dataset", dataset_dir.name)
+                rows.append(aggregate)
+    weak_summary = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+    if weak_summary.empty:
+        weak_summary = read_csv_if_exists(output_root / "weak_label" / "weak_label_summary.csv")
     if weak_summary.empty:
         weak_summary = read_csv_if_exists(Path("outputs") / "weak_label" / "weak_label_summary.csv")
     if weak_summary.empty:
         return weak_summary
+    if "Dataset" not in weak_summary.columns:
+        weak_summary.insert(0, "Dataset", "german_credit")
     keep_cols = [
+        "Dataset",
         "Variant",
         "Model",
         "AUC",
@@ -169,6 +238,14 @@ def fmt_float(value: object, digits: int = 3) -> str:
         return "--"
 
 
+def fmt_pm(mean_value: object, ci_value: object, digits: int = 3) -> str:
+    mean_text = fmt_float(mean_value, digits=digits)
+    ci_text = fmt_float(ci_value, digits=digits)
+    if mean_text == "--" or ci_text == "--":
+        return mean_text
+    return LatexRaw(rf"{mean_text} $\pm$ {ci_text}")
+
+
 def write_latex_table(path: Path, headers: list[str], rows: list[list[object]]) -> None:
     column_spec = "ll" + "r" * max(0, len(headers) - 2)
     lines = [
@@ -178,7 +255,8 @@ def write_latex_table(path: Path, headers: list[str], rows: list[list[object]]) 
         r"\midrule",
     ]
     for row in rows:
-        lines.append(" & ".join(latex_escape(cell) for cell in row) + r" \\")
+        cells = [str(cell) if isinstance(cell, LatexRaw) else latex_escape(cell) for cell in row]
+        lines.append(" & ".join(cells) + r" \\")
     lines.extend([r"\bottomrule", r"\end{tabular}"])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -206,6 +284,130 @@ def write_main_results_latex(summary: pd.DataFrame, path: Path) -> None:
             ]
         )
     write_latex_table(path, ["Dataset", "Model", "AUC", "AUPRC", "Brier", "ECE", "Slope", "Splits"], rows)
+
+
+def write_variability_latex(summary: pd.DataFrame, path: Path) -> None:
+    key_models = ["logreg_baseline", "xgb_baseline", "compact_xgb", "tabpfn_baseline"]
+    table = summary[summary["Model"].isin(key_models)].copy()
+    model_order = {model: index for index, model in enumerate(key_models)}
+    dataset_order = {dataset: index for index, dataset in enumerate(DISPLAY_DATASETS)}
+    table["dataset_order"] = table["Dataset"].map(dataset_order).fillna(999)
+    table["model_order"] = table["Model"].map(model_order).fillna(999)
+    table = table.sort_values(["dataset_order", "model_order"])
+    rows = []
+    for _, row in table.iterrows():
+        rows.append(
+            [
+                DISPLAY_DATASETS.get(row["Dataset"], row["Dataset"]),
+                DISPLAY_MODELS.get(row["Model"], row["Model"]),
+                fmt_pm(row.get("AUC"), row.get("AUC_ci95")),
+                fmt_pm(row.get("Brier"), row.get("Brier_ci95")),
+                fmt_pm(row.get("ECE (10-bin)"), row.get("ECE (10-bin)_ci95")),
+                str(int(float(row.get("n_splits", 0)))) if not pd.isna(row.get("n_splits")) else "--",
+            ]
+        )
+    write_latex_table(path, ["Dataset", "Model", "AUC", "Brier", "ECE", "Splits"], rows)
+
+
+def _format_win_counts(left_wins: int, right_wins: int, ties: int, left_label: str, right_label: str) -> str:
+    if ties:
+        return f"{left_wins}/{right_wins}/{ties}"
+    return f"{left_wins}/{right_wins}"
+
+
+def build_paired_win_counts(split_metrics: pd.DataFrame) -> pd.DataFrame:
+    if split_metrics.empty or "split_seed" not in split_metrics.columns:
+        return pd.DataFrame()
+
+    comparisons = [
+        ("xgb_baseline", "tabpfn_baseline"),
+        ("compact_xgb", "tabpfn_baseline"),
+        ("xgb_baseline", "compact_xgb"),
+    ]
+    rows = []
+    for dataset_name, dataset_df in split_metrics.groupby("Dataset"):
+        for left_model, right_model in comparisons:
+            left = dataset_df[dataset_df["Model"] == left_model].set_index("split_seed")
+            right = dataset_df[dataset_df["Model"] == right_model].set_index("split_seed")
+            common_seeds = sorted(set(left.index) & set(right.index))
+            if not common_seeds:
+                continue
+            left = left.loc[common_seeds]
+            right = right.loc[common_seeds]
+
+            auc_delta = left["AUC"].to_numpy(dtype=float) - right["AUC"].to_numpy(dtype=float)
+            brier_delta = right["Brier"].to_numpy(dtype=float) - left["Brier"].to_numpy(dtype=float)
+            ece_delta = right["ECE (10-bin)"].to_numpy(dtype=float) - left["ECE (10-bin)"].to_numpy(dtype=float)
+
+            def counts(delta: pd.Series | list[float]):
+                values = pd.Series(delta).round(12)
+                return int((values > 0).sum()), int((values < 0).sum()), int((values == 0).sum())
+
+            auc_left, auc_right, auc_tie = counts(auc_delta)
+            brier_left, brier_right, brier_tie = counts(brier_delta)
+            ece_left, ece_right, ece_tie = counts(ece_delta)
+            rows.append(
+                {
+                    "Dataset": dataset_name,
+                    "Comparison": f"{DISPLAY_MODELS[left_model]} vs {DISPLAY_MODELS[right_model]}",
+                    "AUC wins": _format_win_counts(auc_left, auc_right, auc_tie, left_model, right_model),
+                    "Brier wins": _format_win_counts(brier_left, brier_right, brier_tie, left_model, right_model),
+                    "ECE wins": _format_win_counts(ece_left, ece_right, ece_tie, left_model, right_model),
+                    "Common splits": len(common_seeds),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def write_paired_win_counts_latex(win_counts: pd.DataFrame, path: Path) -> None:
+    if win_counts.empty:
+        write_latex_table(path, ["Dataset", "Comparison", "AUC wins", "Brier wins", "ECE wins", "Splits"], [])
+        return
+    rows = []
+    dataset_order = {dataset: index for index, dataset in enumerate(DISPLAY_DATASETS)}
+    table = win_counts.copy()
+    table["dataset_order"] = table["Dataset"].map(dataset_order).fillna(999)
+    table = table.sort_values(["dataset_order", "Comparison"])
+    for _, row in table.iterrows():
+        rows.append(
+            [
+                DISPLAY_DATASETS.get(row["Dataset"], row["Dataset"]),
+                row["Comparison"],
+                row["AUC wins"],
+                row["Brier wins"],
+                row["ECE wins"],
+                row["Common splits"],
+            ]
+        )
+    write_latex_table(path, ["Dataset", "Comparison", "AUC wins", "Brier wins", "ECE wins", "Splits"], rows)
+
+
+def write_efficiency_latex(summary: pd.DataFrame, path: Path) -> None:
+    key_models = ["logreg_baseline", "xgb_baseline", "compact_xgb", "tabpfn_baseline"]
+    table = summary[summary["Model"].isin(key_models)].copy()
+    model_order = {model: index for index, model in enumerate(key_models)}
+    dataset_order = {dataset: index for index, dataset in enumerate(DISPLAY_DATASETS)}
+    table["dataset_order"] = table["Dataset"].map(dataset_order).fillna(999)
+    table["model_order"] = table["Model"].map(model_order).fillna(999)
+    table = table.sort_values(["dataset_order", "model_order"])
+    rows = []
+    for _, row in table.iterrows():
+        rows.append(
+            [
+                DISPLAY_DATASETS.get(row["Dataset"], row["Dataset"]),
+                DISPLAY_MODELS.get(row["Model"], row["Model"]),
+                fmt_float(row.get("TrainTimeSec"), digits=2),
+                fmt_float(row.get("InferenceTimeSec"), digits=3),
+                fmt_float(row.get("PeakMemoryMB"), digits=1),
+                fmt_float(row.get("FeatureCount"), digits=0),
+                str(int(float(row.get("n_splits", 0)))) if not pd.isna(row.get("n_splits")) else "--",
+            ]
+        )
+    write_latex_table(
+        path,
+        ["Dataset", "Model", "Train s", "Infer s", "Peak MB", "Features", "Splits"],
+        rows,
+    )
 
 
 def plot_auc_ece_tradeoff(summary: pd.DataFrame, path: Path) -> None:
@@ -271,12 +473,18 @@ def plot_auc_ece_tradeoff(summary: pd.DataFrame, path: Path) -> None:
     plt.close(fig)
 
 
-def plot_weak_label_sensitivity(weak_label: pd.DataFrame, path: Path) -> None:
+def plot_weak_label_sensitivity(weak_label: pd.DataFrame, path: Path, dataset: str = "german_credit") -> None:
     if weak_label.empty:
         return
     variants = ["baseline", "label_noise_05", "label_noise_10", "proxy_drop"]
+    if dataset != "german_credit":
+        variants = ["baseline", "label_noise_05", "label_noise_10"]
     models = ["logreg_baseline", "xgb_baseline", "compact_xgb"]
-    table = weak_label[weak_label["Variant"].isin(variants) & weak_label["Model"].isin(models)].copy()
+    table = weak_label[
+        (weak_label["Dataset"] == dataset)
+        & weak_label["Variant"].isin(variants)
+        & weak_label["Model"].isin(models)
+    ].copy()
     if table.empty:
         return
     colors = {
@@ -311,18 +519,53 @@ def plot_weak_label_sensitivity(weak_label: pd.DataFrame, path: Path) -> None:
         axis.set_ylabel(ylabel, fontsize=9)
         axis.grid(True, linestyle=":", linewidth=0.6, alpha=0.6)
         axis.tick_params(labelsize=8)
-    axes[0].set_title("Discrimination under weak-label shifts", fontsize=10)
-    axes[1].set_title("Calibration under weak-label shifts", fontsize=10)
+    dataset_label = DISPLAY_DATASETS.get(dataset, dataset)
+    axes[0].set_title(f"{dataset_label}: discrimination shifts", fontsize=10)
+    axes[1].set_title(f"{dataset_label}: calibration shifts", fontsize=10)
     axes[1].legend(loc="best", fontsize=8, frameon=False)
     fig.tight_layout()
     fig.savefig(path, dpi=250, bbox_inches="tight")
     plt.close(fig)
 
 
+def write_weak_label_latex(weak_label: pd.DataFrame, path: Path) -> None:
+    if weak_label.empty:
+        write_latex_table(path, ["Dataset", "Variant", "Model", "AUC", "ECE", "Splits"], [])
+        return
+    variants = ["baseline", "label_noise_05", "label_noise_10", "proxy_drop"]
+    models = ["logreg_baseline", "xgb_baseline", "compact_xgb"]
+    table = weak_label[weak_label["Variant"].isin(variants) & weak_label["Model"].isin(models)].copy()
+    dataset_order = {dataset: index for index, dataset in enumerate(DISPLAY_DATASETS)}
+    variant_order = {variant: index for index, variant in enumerate(variants)}
+    model_order = {model: index for index, model in enumerate(models)}
+    table["dataset_order"] = table["Dataset"].map(dataset_order).fillna(999)
+    table["variant_order"] = table["Variant"].map(variant_order).fillna(999)
+    table["model_order"] = table["Model"].map(model_order).fillna(999)
+    table = table.sort_values(["dataset_order", "variant_order", "model_order"])
+    rows = []
+    for _, row in table.iterrows():
+        rows.append(
+            [
+                DISPLAY_DATASETS.get(row["Dataset"], row["Dataset"]),
+                str(row["Variant"]).replace("_", " "),
+                DISPLAY_MODELS.get(row["Model"], row["Model"]),
+                fmt_float(row.get("AUC")),
+                fmt_float(row.get("ECE (10-bin)")),
+                str(int(float(row.get("n_splits", 0)))) if not pd.isna(row.get("n_splits")) else "--",
+            ]
+        )
+    write_latex_table(path, ["Dataset", "Variant", "Model", "AUC", "ECE", "Splits"], rows)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build final paper tables and figures.")
     parser.add_argument("--output-root", default="outputs/fmsd", help="Root created by run_fmsd_experiments.py.")
     parser.add_argument("--asset-root", default="paper_assets/fmsd", help="Directory for paper-ready CSV/Markdown assets.")
+    parser.add_argument(
+        "--efficiency-root",
+        default=None,
+        help="Optional timing-probe root. If omitted, outputs/efficiency_probe is used when present.",
+    )
     parser.add_argument("--include-tabpfn", action="store_true", help="Accepted for compatibility; final assets include completed TabPFN rows.")
     return parser
 
@@ -331,26 +574,48 @@ def main() -> None:
     args = build_parser().parse_args()
     output_root = Path(args.output_root)
     asset_root = Path(args.asset_root)
+    efficiency_root = Path(args.efficiency_root) if args.efficiency_root else Path("outputs") / "efficiency_probe"
     asset_root.mkdir(parents=True, exist_ok=True)
 
     calibrated = prefer_primary(
         collect_aggregate_tables(output_root, "benchmark_calibrated"),
         collect_legacy_aggregate_tables(Path("outputs") / "benchmark", "benchmark_calibrated"),
     )
+    calibrated_splits = prefer_primary_splits(
+        collect_split_tables(output_root, "benchmark_calibrated"),
+        collect_legacy_split_tables(Path("outputs") / "benchmark", "benchmark_calibrated"),
+    )
     uncalibrated = prefer_primary(
         collect_aggregate_tables(output_root, "benchmark_uncalibrated"),
         collect_legacy_aggregate_tables(Path("outputs_no_cal") / "benchmark", "benchmark_uncalibrated"),
     )
     summary = build_summary_table(calibrated)
+    efficiency_summary = summary
+    if efficiency_root.exists():
+        efficiency_calibrated = collect_aggregate_tables(efficiency_root, "benchmark_calibrated")
+        if not efficiency_calibrated.empty:
+            efficiency_summary = build_summary_table(efficiency_calibrated)
     calibration_delta = build_calibration_delta(calibrated, uncalibrated)
     weak_label = collect_weak_label_summary(output_root)
+    win_counts = build_paired_win_counts(calibrated_splits)
 
     summary.to_csv(asset_root / "main_summary_table.csv", index=False)
+    efficiency_summary.to_csv(asset_root / "efficiency_summary_table.csv", index=False)
     calibration_delta.to_csv(asset_root / "calibration_delta_table.csv", index=False)
     weak_label.to_csv(asset_root / "weak_label_sensitivity_table.csv", index=False)
+    win_counts.to_csv(asset_root / "paired_win_counts.csv", index=False)
     write_main_results_latex(summary, asset_root / "main_results_table.tex")
+    write_variability_latex(summary, asset_root / "main_results_with_ci_table.tex")
+    write_paired_win_counts_latex(win_counts, asset_root / "paired_win_counts_table.tex")
+    write_efficiency_latex(efficiency_summary, asset_root / "efficiency_table.tex")
+    write_weak_label_latex(weak_label, asset_root / "weak_label_two_dataset_table.tex")
     plot_auc_ece_tradeoff(summary, asset_root / "auc_ece_tradeoff.png")
-    plot_weak_label_sensitivity(weak_label, asset_root / "weak_label_sensitivity.png")
+    plot_weak_label_sensitivity(weak_label, asset_root / "weak_label_sensitivity.png", dataset="german_credit")
+    plot_weak_label_sensitivity(
+        weak_label,
+        asset_root / "weak_label_sensitivity_australian.png",
+        dataset="australian_credit",
+    )
     print(f"Paper assets written under {asset_root.resolve()}")
 
 

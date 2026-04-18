@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
@@ -88,7 +89,9 @@ def run_single_split(model_name: str, model, X, y, exp_cfg: ExperimentConfig, sp
     )
 
     fitted_model = _clone_or_build_model(model)
+    fit_start = time.perf_counter()
     fitted_model.fit(X_train, y_train)
+    train_time_sec = time.perf_counter() - fit_start
 
     p_val = fitted_model.predict_proba(X_val)[:, 1]
     calibration_enabled = getattr(fitted_model, "calibration_enabled", True)
@@ -101,13 +104,17 @@ def run_single_split(model_name: str, model, X, y, exp_cfg: ExperimentConfig, sp
     p_val_calibrated = apply_optional_calibrator(p_val, calibrator)
     threshold, f1_val = best_f1_threshold_from_val(y_val, p_val_calibrated)
 
+    inference_start = time.perf_counter()
     p_test_raw = fitted_model.predict_proba(X_test)[:, 1]
+    inference_time_sec = time.perf_counter() - inference_start
     p_test = apply_optional_calibrator(p_test_raw, calibrator)
 
     metrics = evaluate_predictions(
         y_true=y_test,
         y_prob=p_test,
         threshold=threshold,
+        train_time=train_time_sec,
+        inference_time=inference_time_sec,
     )
 
     metrics["Model"] = model_name

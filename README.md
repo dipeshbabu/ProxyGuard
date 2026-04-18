@@ -83,6 +83,12 @@ This regenerates the German Credit weak-label sensitivity outputs used for the w
 python main.py --mode weak_label --dataset german_credit --repeats 20 --output-root outputs --calibration-method temperature
 ```
 
+The revision also supports a small synthetic-noise robustness probe on real-label datasets. The Australian Credit probe used for the revised robustness table can be regenerated with:
+
+```bash
+python main.py --mode weak_label --dataset australian_credit --repeats 20 --output-root outputs --calibration-method temperature --no-reliability
+```
+
 ## Run TabPFN Outputs Used In The Final Draft
 
 The final draft uses completed TabPFN rows for Australian, German, and Taiwan. GMSC TabPFN is not included because it did not complete under the CPU budget.
@@ -107,12 +113,23 @@ This writes the final local tables and figures under `paper_assets/fmsd_tabpfn_m
 python scripts/build_paper_assets.py --output-root outputs/fmsd_tabpfn --asset-root paper_assets/fmsd_tabpfn_mixed --include-tabpfn
 ```
 
+If a timing probe exists under `outputs/efficiency_probe`, the asset builder uses it for the practical cost table while keeping the main results tied to the full benchmark. To set this explicitly:
+
+```bash
+python scripts/build_paper_assets.py --output-root outputs/fmsd_tabpfn --asset-root paper_assets/fmsd_tabpfn_mixed --efficiency-root outputs/efficiency_probe --include-tabpfn
+```
+
 The final draft uses:
 
 ```text
 paper_assets/fmsd_tabpfn_mixed/main_results_table.tex
+paper_assets/fmsd_tabpfn_mixed/main_results_with_ci_table.tex
+paper_assets/fmsd_tabpfn_mixed/paired_win_counts_table.tex
+paper_assets/fmsd_tabpfn_mixed/efficiency_table.tex
 paper_assets/fmsd_tabpfn_mixed/auc_ece_tradeoff.png
 paper_assets/fmsd_tabpfn_mixed/weak_label_sensitivity.png
+paper_assets/fmsd_tabpfn_mixed/weak_label_sensitivity_australian.png
+paper_assets/fmsd_tabpfn_mixed/weak_label_two_dataset_table.tex
 paper_assets/fmsd_tabpfn_mixed/calibration_delta_table.csv
 ```
 

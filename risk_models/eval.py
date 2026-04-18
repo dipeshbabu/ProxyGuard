@@ -114,6 +114,7 @@ def evaluate_predictions(
     feature_count: Optional[int] = None,
     train_time: Optional[float] = None,
     inference_time: Optional[float] = None,
+    peak_memory_mb: Optional[float] = None,
 ) -> Dict[str, float]:
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.clip(np.asarray(y_prob).astype(float), 1e-6, 1 - 1e-6)
@@ -143,6 +144,8 @@ def evaluate_predictions(
         metrics["TrainTimeSec"] = float(train_time)
     if inference_time is not None:
         metrics["InferenceTimeSec"] = float(inference_time)
+    if peak_memory_mb is not None:
+        metrics["PeakMemoryMB"] = float(peak_memory_mb)
     return metrics
 
 
@@ -200,6 +203,7 @@ DEFAULT_AGGREGATE_METRICS = [
     "FeatureCount",
     "TrainTimeSec",
     "InferenceTimeSec",
+    "PeakMemoryMB",
 ]
 
 

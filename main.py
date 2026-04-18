@@ -88,6 +88,26 @@ def run_ablation_mode(args):
 
 
 def _weak_label_variants(dataset_config):
+    if dataset_config.name != "german_credit":
+        label_params = dict(dataset_config.label_params)
+        return [
+            ("baseline", dataset_config),
+            (
+                "label_noise_05",
+                clone_dataset_config(
+                    dataset_config,
+                    label_params={**label_params, "noise_rate": 0.05, "random_state": 3407},
+                ),
+            ),
+            (
+                "label_noise_10",
+                clone_dataset_config(
+                    dataset_config,
+                    label_params={**label_params, "noise_rate": 0.10, "random_state": 3407},
+                ),
+            ),
+        ]
+
     label_params = dict(dataset_config.label_params)
     return [
         ("baseline", dataset_config),
@@ -127,19 +147,35 @@ def _weak_label_variants(dataset_config):
 
 def run_weak_label_mode(args):
     selected = _resolve_datasets(args.dataset)
-    invalid = [dataset_name for dataset_name in selected if dataset_name != "german_credit"]
-    if invalid:
-        invalid_list = ", ".join(invalid)
-        raise ValueError(
-            f"Weak-label mode is only supported for 'german_credit'. Received: {invalid_list}"
-        )
 
     exp_config = _build_experiment_config(args)
     model_configs = get_fmsd_model_configs(include_tabpfn=False)
+    expected_models = {config.name for config in model_configs}
     all_results = []
     for dataset_name in selected:
         base_config = get_dataset_config(dataset_name)
         for variant_name, variant_config in _weak_label_variants(base_config):
+            aggregate_path = (
+                Path(exp_config.output_root)
+                / "weak_label"
+                / variant_name
+                / dataset_name
+                / "aggregate_metrics.csv"
+            )
+            if aggregate_path.exists():
+                aggregate = pd.read_csv(aggregate_path)
+                if (
+                    not aggregate.empty
+                    and expected_models.issubset(set(aggregate["Model"]))
+                    and (aggregate.loc[aggregate["Model"].isin(expected_models), "n_splits"] >= exp_config.n_repeats).all()
+                ):
+                    print(f"\nWeak-label results for {dataset_name} [{variant_name}] already complete, skipping.")
+                    aggregate = aggregate.copy()
+                    aggregate.insert(0, "Variant", variant_name)
+                    aggregate.insert(0, "Dataset", dataset_name)
+                    all_results.append(aggregate)
+                    continue
+
             result_bundle = run_benchmark(
                 variant_config,
                 model_configs,
@@ -148,6 +184,7 @@ def run_weak_label_mode(args):
             )
             aggregate = result_bundle["aggregate_metrics"].copy()
             aggregate.insert(0, "Variant", variant_name)
+            aggregate.insert(0, "Dataset", dataset_name)
             all_results.append(aggregate)
             print(f"\nWeak-label results for {dataset_name} [{variant_name}]:")
             _print_summary(result_bundle)
@@ -156,6 +193,16 @@ def run_weak_label_mode(args):
         combined = pd.concat(all_results, ignore_index=True)
         output_path = Path(exp_config.output_root) / "weak_label" / "weak_label_summary.csv"
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        if output_path.exists():
+            existing = pd.read_csv(output_path)
+            if not existing.empty:
+                if "Dataset" not in existing.columns:
+                    existing.insert(0, "Dataset", "german_credit")
+                combined = (
+                    pd.concat([existing, combined], ignore_index=True)
+                    .drop_duplicates(subset=["Dataset", "Variant", "Model"], keep="last")
+                    .reset_index(drop=True)
+                )
         combined.to_csv(output_path, index=False)
         print(f"\nSaved weak-label summary to {output_path}")
 
