@@ -1,29 +1,61 @@
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *.pyo
 .pytest_cache/
+pytest-cache-files-*/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 
+# Virtual environments and local Python tooling
 .venv/
 venv/
 env/
 ENV/
+uv.lock
 
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+
+# Test and coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Build/package artifacts
+build/
+dist/
+*.egg-info/
+
+# Editor and notebook state
 .ipynb_checkpoints/
 .vscode/
+.idea/
 
+# Generated experiment outputs
 outputs/*
 !outputs/.gitkeep
+outputs_no_cal/
 
+# Local datasets are not pushed; keep only the placeholder
 data/*
 !data/.gitkeep
 
+# Local paper draft and generated paper assets are not pushed
+paper/
+paper_assets/
+
+# Model/checkpoint artifacts
 *.pkl
 *.joblib
-*.png
-*.pdf
-*.tex
+*.pt
+*.pth
+*.ckpt
 
+# OS files
 .DS_Store
 Thumbs.db

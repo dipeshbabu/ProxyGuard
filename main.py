@@ -9,6 +9,7 @@ from risk_models.configs import (
     ExperimentConfig,
     clone_dataset_config,
     clone_experiment_config,
+    get_fmsd_model_configs,
     get_ablation_model_configs,
     get_benchmark_model_configs,
     get_dataset_config,
@@ -70,7 +71,7 @@ def _print_summary(result_bundle):
 
 def run_benchmark_mode(args):
     exp_config = _build_experiment_config(args)
-    model_configs = get_benchmark_model_configs()
+    model_configs = get_fmsd_model_configs(include_tabpfn=args.include_tabpfn)
     for dataset_name in _resolve_datasets(args.dataset):
         dataset_config = get_dataset_config(dataset_name)
         result_bundle = run_benchmark(dataset_config, model_configs, exp_config, mode="benchmark")
@@ -185,6 +186,11 @@ def build_parser():
     )
     parser.add_argument("--no-reliability", action="store_true", help="Skip reliability diagram generation.")
     parser.add_argument("--no-subgroups", action="store_true", help="Skip subgroup metrics.")
+    parser.add_argument(
+        "--include-tabpfn",
+        action="store_true",
+        help="Include the TabPFN tabular foundation-model baseline. Requires license acceptance and TABPFN_TOKEN.",
+    )
     return parser
 
 

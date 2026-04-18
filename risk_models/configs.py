@@ -175,6 +175,30 @@ def get_benchmark_model_configs() -> List[ModelConfig]:
     return [clone_model_config(model_cfg) for model_cfg in MODEL_REGISTRY.values()]
 
 
+def get_tabular_foundation_model_configs() -> List[ModelConfig]:
+    return [
+        ModelConfig(
+            name="tabpfn_baseline",
+            selector_type="none",
+            use_feature_engineering=False,
+            use_segmenter=False,
+            predictor_type="tabpfn",
+            use_calibration=True,
+            estimator_params={
+                "device": "auto",
+                "n_estimators": 1,
+                "max_train_samples": 1024,
+            },
+        )
+    ]
+
+
+def get_fmsd_model_configs(include_tabpfn: bool = False) -> List[ModelConfig]:
+    configs = get_benchmark_model_configs()
+    if include_tabpfn:
+        configs.extend(get_tabular_foundation_model_configs())
+    return configs
+
 def get_ablation_model_configs() -> List[ModelConfig]:
     compact = clone_model_config(MODEL_REGISTRY["compact_xgb"])
     segmented = clone_model_config(MODEL_REGISTRY["compact_xgb_segmented"])

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import itertools
+import os
 import time
 from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
-from sklearn.base import clone
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import mutual_info_classif
@@ -324,6 +325,85 @@ class DataEfficientEnsemble:
         return self.final_model_.predict_proba(X)
 
 
+class TabPFNAdapter(BaseEstimator, ClassifierMixin):
+    def __init__(
+        self,
+        device: str = "auto",
+        n_estimators: int = 1,
+        max_train_samples: int = 10000,
+        model_cache_dir: str = "outputs/tabpfn_cache",
+        random_state: int = SEED,
+    ):
+        self.device = device
+        self.n_estimators = n_estimators
+        self.max_train_samples = max_train_samples
+        self.model_cache_dir = model_cache_dir
+        self.random_state = random_state
+
+    @staticmethod
+    def _as_numeric_frame(X: pd.DataFrame) -> pd.DataFrame:
+        frame = pd.DataFrame(X).copy()
+        for column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+            if frame[column].isna().any():
+                frame[column] = frame[column].fillna(frame[column].median())
+        return frame.astype(float)
+
+    def _build_classifier(self):
+        cache_dir = os.path.abspath(self.model_cache_dir)
+        os.makedirs(cache_dir, exist_ok=True)
+        os.environ.setdefault("TABPFN_MODEL_CACHE_DIR", cache_dir)
+        os.environ.setdefault("TABPFN_DISABLE_TELEMETRY", "1")
+        os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
+        os.environ.setdefault("TABPFN_NO_BROWSER", "1")
+        try:
+            from tabpfn import TabPFNClassifier
+        except ImportError as exc:
+            raise ImportError(
+                "The TabPFN baseline requires `tabpfn`. Install dependencies with "
+                "`pip install -r requirements.txt` or run without `--include-tabpfn`."
+            ) from exc
+
+        try:
+            return TabPFNClassifier(
+                device=self.device,
+                n_estimators=self.n_estimators,
+                random_state=self.random_state,
+            )
+        except TypeError:
+            return TabPFNClassifier()
+
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        X_frame = self._as_numeric_frame(X)
+        y_array = np.asarray(y).astype(int)
+        self.classes_ = np.unique(y_array)
+        self.feature_names_in_ = np.asarray(X_frame.columns)
+
+        if len(X_frame) > self.max_train_samples:
+            rng = np.random.default_rng(self.random_state)
+            sample_idx = rng.choice(len(X_frame), size=self.max_train_samples, replace=False)
+            X_fit = X_frame.iloc[sample_idx]
+            y_fit = y_array[sample_idx]
+        else:
+            X_fit = X_frame
+            y_fit = y_array
+
+        self.model_ = self._build_classifier()
+        self.model_.fit(X_fit.to_numpy(dtype=float), y_fit)
+        return self
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+        X_frame = self._as_numeric_frame(X)
+        probabilities = self.model_.predict_proba(X_frame.to_numpy(dtype=float))
+        probabilities = np.asarray(probabilities, dtype=float)
+        if probabilities.ndim == 1:
+            probabilities = np.column_stack([1.0 - probabilities, probabilities])
+        return probabilities
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+
 class CompactCreditPipeline:
     def __init__(
         self,
@@ -530,6 +610,9 @@ def build_predictor(config: ModelConfig):
     if config.predictor_type == "xgb":
         params.setdefault("eval_metric", "logloss")
         return XGBClassifier(**params)
+    if config.predictor_type == "tabpfn":
+        params.setdefault("random_state", SEED)
+        return TabPFNAdapter(**params)
     raise ValueError(f"Unknown predictor type: {config.predictor_type}")
 
 
