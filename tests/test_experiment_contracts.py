@@ -16,6 +16,16 @@ from risk_models.cv_runner import run_benchmark
 from risk_models.dataset import load_dataset
 
 
+def test_fmsd_model_scope_matches_final_paper() -> None:
+    model_names = [config.name for config in get_fmsd_model_configs(include_tabpfn=True)]
+    assert model_names == [
+        "logreg_baseline",
+        "xgb_baseline",
+        "compact_xgb",
+        "tabpfn_baseline",
+    ]
+
+
 def require_local_dataset(dataset_name: str):
     config = get_dataset_config(dataset_name)
     if not Path(config.path).exists():

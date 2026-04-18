@@ -11,7 +11,6 @@ from risk_models.configs import (
     clone_experiment_config,
     get_fmsd_model_configs,
     get_ablation_model_configs,
-    get_benchmark_model_configs,
     get_dataset_config,
     get_default_experiment_config,
 )
@@ -136,7 +135,7 @@ def run_weak_label_mode(args):
         )
 
     exp_config = _build_experiment_config(args)
-    model_configs = get_benchmark_model_configs()
+    model_configs = get_fmsd_model_configs(include_tabpfn=False)
     all_results = []
     for dataset_name in selected:
         base_config = get_dataset_config(dataset_name)
@@ -164,7 +163,7 @@ def run_weak_label_mode(args):
 def run_debug_mode(args):
     exp_config = _build_experiment_config(args)
     exp_config = clone_experiment_config(exp_config, n_repeats=1, save_shap=False)
-    model_configs = get_benchmark_model_configs()[:3]
+    model_configs = get_fmsd_model_configs(include_tabpfn=False)
     dataset_name = _resolve_datasets(args.dataset)[0]
     dataset_config = get_dataset_config(dataset_name)
     result_bundle = run_benchmark(dataset_config, model_configs, exp_config, mode="debug")

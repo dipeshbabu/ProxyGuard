@@ -194,7 +194,8 @@ def get_tabular_foundation_model_configs() -> List[ModelConfig]:
 
 
 def get_fmsd_model_configs(include_tabpfn: bool = False) -> List[ModelConfig]:
-    configs = get_benchmark_model_configs()
+    paper_model_names = ["logreg_baseline", "xgb_baseline", "compact_xgb"]
+    configs = [clone_model_config(MODEL_REGISTRY[name]) for name in paper_model_names]
     if include_tabpfn:
         configs.extend(get_tabular_foundation_model_configs())
     return configs

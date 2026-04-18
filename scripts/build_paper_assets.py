@@ -17,19 +17,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 PAPER_MODELS = [
     "logreg_baseline",
-    "rf_baseline",
     "xgb_baseline",
     "compact_xgb",
-    "compact_xgb_segmented",
     "tabpfn_baseline",
 ]
 
 DISPLAY_MODELS = {
     "logreg_baseline": "LogReg",
-    "rf_baseline": "RF",
     "xgb_baseline": "XGB",
     "compact_xgb": "Compact XGB",
-    "compact_xgb_segmented": "Segmented XGB",
     "tabpfn_baseline": "TabPFN",
 }
 
@@ -112,8 +108,10 @@ def build_calibration_delta(calibrated: pd.DataFrame, uncalibrated: pd.DataFrame
     if calibrated.empty or uncalibrated.empty:
         return pd.DataFrame()
     metrics = ["AUC", "Brier", "ECE (10-bin)", "LogLoss", "CalibrationSlope"]
-    left = calibrated[["Dataset", "Model"] + [col for col in metrics if col in calibrated.columns]].copy()
-    right = uncalibrated[["Dataset", "Model"] + [col for col in metrics if col in uncalibrated.columns]].copy()
+    left_source = calibrated[calibrated["Model"].isin(PAPER_MODELS)].copy()
+    right_source = uncalibrated[uncalibrated["Model"].isin(PAPER_MODELS)].copy()
+    left = left_source[["Dataset", "Model"] + [col for col in metrics if col in left_source.columns]].copy()
+    right = right_source[["Dataset", "Model"] + [col for col in metrics if col in right_source.columns]].copy()
     merged = left.merge(right, on=["Dataset", "Model"], suffixes=("_calibrated", "_uncalibrated"))
     for metric in metrics:
         cal_col = f"{metric}_calibrated"
