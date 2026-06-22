@@ -7,6 +7,7 @@ from risk_models.configs import DatasetConfig
 from risk_models.datasets.australian_credit import load_australian_credit
 from risk_models.datasets.give_me_some_credit import load_give_me_some_credit
 from risk_models.datasets.german_credit import load_german_credit
+from risk_models.datasets.generic_tabular import load_generic_tabular
 from risk_models.datasets.taiwan_default import load_taiwan_default
 
 
@@ -26,6 +27,8 @@ def load_dataset(dataset_config: DatasetConfig) -> Dict[str, Any]:
         return _apply_generic_label_noise(load_taiwan_default(dataset_config), dataset_config)
     if dataset_config.name == "australian_credit":
         return _apply_generic_label_noise(load_australian_credit(dataset_config), dataset_config)
+    if dataset_config.label_params.get("loader") == "generic_tabular":
+        return _apply_generic_label_noise(load_generic_tabular(dataset_config), dataset_config)
     raise ValueError(f"Unknown dataset: {dataset_config.name}")
 
 

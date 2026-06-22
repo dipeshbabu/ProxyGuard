@@ -2,11 +2,11 @@
 
 ## Overview
 
-This repository supports a short workshop paper on reliability-first evaluation of tabular foundation models for credit risk. The paper asks a practical question: when credit-risk models are judged by calibrated probabilities instead of ranking metrics alone, do newer tabular foundation models such as TabPFN change the baseline story?
+This repository supports a reliability-first study of tabular models for credit risk. The paper asks a practical question: when credit-risk models are judged by calibrated probabilities and decision cost instead of ranking metrics alone, do newer tabular foundation models such as TabPFN change the baseline story?
 
 The problem is important because credit-risk systems often use predicted probabilities for thresholding, portfolio monitoring, and downstream decisions. A model can have acceptable AUC while still producing probabilities that are poorly calibrated for decision making. This benchmark therefore evaluates both discrimination and reliability across four public credit-related datasets.
 
-The paper's main finding is that XGBoost and compact XGBoost remain the strongest overall baselines, especially on larger datasets, while TabPFN is competitive on smaller datasets and should be included as a first-class baseline in modern tabular evaluations. The work is not proposing a new model; it is making the empirical case that calibration-aware evaluation changes how model quality should be interpreted in credit-risk settings.
+The current workshop-style finding is that XGBoost and compact XGBoost remain the strongest overall baselines, especially on larger datasets, while TabPFN is competitive on smaller datasets and should be included as a first-class baseline in modern tabular evaluations. The spotlight-oriented revision adds a reliability-constrained ensemble (RCE) that learns mixture weights across classical tabular models using an inner validation objective with log loss, Brier score, ECE, class-balance calibration, and decision-cost penalties.
 
 ## What Is In Scope
 
@@ -14,8 +14,12 @@ The benchmark compares:
 
 - Logistic regression
 - XGBoost
+- LightGBM
+- CatBoost
 - Compact XGBoost
 - TabPFN
+- TabICL
+- Reliability-constrained ensemble / RCE
 
 on four credit-related tabular datasets:
 
@@ -105,6 +109,16 @@ Taiwan uses 5 splits:
 python scripts/run_fmsd_experiments.py --datasets taiwan_default --repeats 5 --output-root outputs/fmsd_tabpfn --model-set tabpfn --skip-ablation --skip-weak-label
 ```
 
+## Run The Spotlight-Oriented Model Set
+
+This includes logistic regression, XGBoost, LightGBM, CatBoost, compact XGBoost, TabPFN, TabICL, and the reliability-constrained ensemble. Use this mode for the method-paper revision.
+
+```bash
+python scripts/run_fmsd_experiments.py --datasets all --repeats 20 --output-root outputs/spotlight_final --model-set spotlight
+```
+
+For a quick contract run of only the new method on one dataset, lower `--repeats` and use a temporary output root.
+
 ## Build Local Paper Assets
 
 This writes the final local tables and figures under `paper_assets/fmsd_tabpfn_mixed/`.
@@ -118,6 +132,15 @@ If a timing probe exists under `outputs/efficiency_probe`, the asset builder use
 ```bash
 python scripts/build_paper_assets.py --output-root outputs/fmsd_tabpfn --asset-root paper_assets/fmsd_tabpfn_mixed --efficiency-root outputs/efficiency_probe --include-tabpfn
 ```
+
+For the spotlight-oriented revision:
+
+```bash
+python scripts/build_paper_assets.py --output-root outputs/spotlight_final --asset-root paper_assets/spotlight_final --include-tabpfn
+python scripts/build_reviewer_readiness_audit.py --output-root outputs/spotlight_final --asset-root paper_assets/spotlight_readiness
+```
+
+The reviewer-readiness audit intentionally reports gaps, including dataset breadth, missing split counts, missing method ablations, or missing subgroup artifacts.
 
 The final draft uses:
 
@@ -147,7 +170,11 @@ The implemented evaluation uses:
 - stratified train/validation/test splits
 - validation-fitted temperature scaling
 - AUC, AUPRC, Brier, ECE, log loss, calibration slope/intercept
+- ECE sensitivity across 10, 15, 20, and adaptive bins
+- validation-selected F1 and asymmetric decision-cost thresholds
 - repeated split aggregation with confidence intervals
+- subgroup reliability artifacts
+- reliability-constrained ensemble with log-loss, Brier, ECE, calibration-balance, and cost penalties
 - German Credit weak-label perturbations
 
 See:

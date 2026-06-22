@@ -16,6 +16,8 @@ from risk_models.configs import (
     get_default_experiment_config,
     get_dataset_config,
     get_fmsd_model_configs,
+    get_midas_model_configs,
+    get_spotlight_model_configs,
     get_tabular_foundation_model_configs,
 )
 from risk_models.cv_runner import run_ablation_suite, run_benchmark
@@ -39,9 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model-set",
-        choices=["classical", "tabpfn", "all"],
+        choices=["classical", "tabpfn", "all", "spotlight"],
         default="classical",
-        help="Model group to run. Use `tabpfn` to resume only the foundation-model baseline.",
+        help=(
+            "Model group to run. Use `tabpfn` to resume only the TabPFN baseline, "
+            "or `spotlight` for the full reviewer-response model set."
+        ),
     )
     parser.add_argument("--skip-no-calibration", action="store_true", help="Skip the uncalibrated comparison run.")
     parser.add_argument("--skip-ablation", action="store_true", help="Skip German-credit ablations.")
@@ -142,6 +147,8 @@ def main() -> None:
 
     if args.model_set == "tabpfn":
         model_configs = get_tabular_foundation_model_configs()
+    elif args.model_set == "spotlight":
+        model_configs = get_spotlight_model_configs(include_tabpfn=True, include_tabicl=True)
     else:
         model_configs = get_fmsd_model_configs(include_tabpfn=args.include_tabpfn or args.model_set == "all")
     run_main_benchmarks(args, model_configs, dataset_names)

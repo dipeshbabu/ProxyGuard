@@ -1,4 +1,5 @@
 from pathlib import Path
+import tracemalloc
 import time
 from typing import Any, Dict, List, Tuple
 
@@ -13,6 +14,7 @@ from risk_models.eval import (
     DEFAULT_AGGREGATE_METRICS,
     TemperatureScaler,
     aggregate_metrics,
+    best_cost_threshold_from_val,
     best_f1_threshold_from_val,
     compute_feature_stability,
     evaluate_predictions,
@@ -89,24 +91,42 @@ def run_single_split(model_name: str, model, X, y, exp_cfg: ExperimentConfig, sp
     )
 
     fitted_model = _clone_or_build_model(model)
+    tracemalloc.start()
     fit_start = time.perf_counter()
     fitted_model.fit(X_train, y_train)
     train_time_sec = time.perf_counter() - fit_start
+    _, peak_fit_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    preprocess_time_sec = getattr(fitted_model, "preprocess_time_", None)
+    model_fit_time_sec = getattr(fitted_model, "predictor_fit_time_", None)
 
     p_val = fitted_model.predict_proba(X_val)[:, 1]
     calibration_enabled = getattr(fitted_model, "calibration_enabled", True)
+    calibration_start = time.perf_counter()
     calibrator = fit_optional_calibrator(
         p_val=p_val,
         y_val=y_val,
         exp_cfg=exp_cfg,
         enabled=calibration_enabled,
     )
+    calibration_time_sec = time.perf_counter() - calibration_start
     p_val_calibrated = apply_optional_calibrator(p_val, calibrator)
     threshold, f1_val = best_f1_threshold_from_val(y_val, p_val_calibrated)
+    cost_thresholds: dict[float, tuple[float, float]] = {}
+    for fn_cost in (2.0, 5.0, 10.0, 20.0):
+        cost_thresholds[fn_cost] = best_cost_threshold_from_val(
+            y_val,
+            p_val_calibrated,
+            fn_cost=fn_cost,
+            fp_cost=1.0,
+        )
 
+    tracemalloc.start()
     inference_start = time.perf_counter()
     p_test_raw = fitted_model.predict_proba(X_test)[:, 1]
     inference_time_sec = time.perf_counter() - inference_start
+    _, peak_inference_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
     p_test = apply_optional_calibrator(p_test_raw, calibrator)
 
     metrics = evaluate_predictions(
@@ -115,13 +135,25 @@ def run_single_split(model_name: str, model, X, y, exp_cfg: ExperimentConfig, sp
         threshold=threshold,
         train_time=train_time_sec,
         inference_time=inference_time_sec,
+        peak_memory_mb=max(peak_fit_bytes, peak_inference_bytes) / (1024.0 * 1024.0),
     )
+    for fn_cost, (cost_threshold, _) in cost_thresholds.items():
+        cost_metrics = evaluate_predictions(y_true=y_test, y_prob=p_test, threshold=cost_threshold)
+        cost_name = f"DecisionCost{int(fn_cost)}x"
+        metrics[cost_name] = cost_metrics[cost_name]
+        metrics[f"{cost_name}RelApproveAll"] = cost_metrics[f"{cost_name}RelApproveAll"]
 
     metrics["Model"] = model_name
     metrics["split_seed"] = split_seed
     metrics["val_F1_best"] = f1_val
+    for fn_cost, (cost_threshold, cost_val) in cost_thresholds.items():
+        metrics[f"val_cost_{int(fn_cost)}x_best"] = cost_val
+        metrics[f"cost_threshold_{int(fn_cost)}x"] = cost_threshold
     metrics["threshold"] = threshold
     metrics["calibration_applied"] = int(calibrator is not None)
+    metrics["PreprocessTimeSec"] = float(preprocess_time_sec) if preprocess_time_sec is not None else np.nan
+    metrics["ModelFitTimeSec"] = float(model_fit_time_sec) if model_fit_time_sec is not None else np.nan
+    metrics["CalibrationTimeSec"] = float(calibration_time_sec)
 
     feature_count = getattr(fitted_model, "get_feature_count", None)
     if callable(feature_count):

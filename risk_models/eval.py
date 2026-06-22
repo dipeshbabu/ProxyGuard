@@ -36,6 +36,26 @@ def compute_ece(y_true, y_prob, n_bins: int = 10) -> float:
     return float(ece)
 
 
+def compute_adaptive_ece(y_true, y_prob, n_bins: int = 10) -> float:
+    y_true = np.asarray(y_true).ravel()
+    y_prob = np.asarray(y_prob).ravel()
+    if len(y_true) == 0:
+        return np.nan
+    order = np.argsort(y_prob)
+    y_sorted = y_true[order]
+    p_sorted = y_prob[order]
+    bins = np.array_split(np.arange(len(y_sorted)), min(n_bins, len(y_sorted)))
+    ece = 0.0
+    n_obs = len(y_sorted)
+    for bin_idx in bins:
+        if len(bin_idx) == 0:
+            continue
+        avg_conf = p_sorted[bin_idx].mean()
+        avg_acc = y_sorted[bin_idx].mean()
+        ece += (len(bin_idx) / n_obs) * abs(avg_acc - avg_conf)
+    return float(ece)
+
+
 def calibration_slope_intercept(y_true, y_prob) -> tuple[float, float]:
     y_true = np.asarray(y_true).astype(float)
     y_prob = np.clip(np.asarray(y_prob).astype(float), 1e-6, 1 - 1e-6)
@@ -66,9 +86,34 @@ def best_f1_threshold_from_val(y_val, p_val):
     return best_threshold, float(best_score)
 
 
+def expected_decision_cost(y_true, y_prob, threshold: float, fn_cost: float = 5.0, fp_cost: float = 1.0) -> float:
+    y_true = np.asarray(y_true).astype(int)
+    y_prob = np.asarray(y_prob).astype(float)
+    y_pred = (y_prob >= threshold).astype(int)
+    false_negatives = ((y_true == 1) & (y_pred == 0)).sum()
+    false_positives = ((y_true == 0) & (y_pred == 1)).sum()
+    return float((fn_cost * false_negatives + fp_cost * false_positives) / max(1, len(y_true)))
+
+
+def best_cost_threshold_from_val(y_val, p_val, fn_cost: float = 5.0, fp_cost: float = 1.0):
+    thresholds = np.linspace(0.0, 1.0, 101)
+    best_threshold = 0.5
+    best_cost = np.inf
+    for threshold in thresholds:
+        cost = expected_decision_cost(y_val, p_val, threshold, fn_cost=fn_cost, fp_cost=fp_cost)
+        if np.isfinite(cost) and cost < best_cost:
+            best_cost = float(cost)
+            best_threshold = float(threshold)
+    return best_threshold, best_cost
+
+
 class TemperatureScaler:
     def __init__(self):
         self.temperature_ = 1.0
+
+    @staticmethod
+    def _temperature_from_log(log_temperature):
+        return float(np.exp(np.clip(log_temperature, -5.0, 5.0)))
 
     @staticmethod
     def _logit(probabilities):
@@ -79,12 +124,13 @@ class TemperatureScaler:
         logits = self._logit(p_val)
 
         def objective(log_temperature):
-            temperature = np.exp(log_temperature[0])
-            calibrated = 1.0 / (1.0 + np.exp(-(logits / temperature)))
+            temperature = self._temperature_from_log(log_temperature[0])
+            scaled_logits = np.clip(logits / temperature, -30.0, 30.0)
+            calibrated = 1.0 / (1.0 + np.exp(-scaled_logits))
             return log_loss(y_val, np.clip(calibrated, 1e-6, 1 - 1e-6))
 
         result = minimize(objective, x0=np.array([0.0]), method="L-BFGS-B")
-        self.temperature_ = float(np.exp(result.x[0])) if result.success else 1.0
+        self.temperature_ = self._temperature_from_log(result.x[0]) if result.success else 1.0
         return self
 
     def transform(self, probabilities):
@@ -130,6 +176,9 @@ def evaluate_predictions(
         "Recall": recall_score(y_true, y_pred, zero_division=0),
         "Brier": brier_score_loss(y_true, y_prob),
         "ECE (10-bin)": compute_ece(y_true, y_prob, n_bins=10),
+        "ECE (15-bin)": compute_ece(y_true, y_prob, n_bins=15),
+        "ECE (20-bin)": compute_ece(y_true, y_prob, n_bins=20),
+        "AdaptiveECE (10-bin)": compute_adaptive_ece(y_true, y_prob, n_bins=10),
         "ECE": compute_ece(y_true, y_prob, n_bins=10),
         "LogLoss": log_loss(y_true, y_prob),
         "CalibrationSlope": slope,
@@ -138,6 +187,11 @@ def evaluate_predictions(
         "Support": int(len(y_true)),
         "PositiveRate": float(y_true.mean()),
     }
+    for fn_cost in (2.0, 5.0, 10.0, 20.0):
+        cost_name = f"DecisionCost{int(fn_cost)}x"
+        base_cost = max(1e-12, fn_cost * float(y_true.mean()))
+        metrics[cost_name] = expected_decision_cost(y_true, y_prob, threshold, fn_cost=fn_cost, fp_cost=1.0)
+        metrics[f"{cost_name}RelApproveAll"] = metrics[cost_name] / base_cost
     if feature_count is not None:
         metrics["FeatureCount"] = int(feature_count)
     if train_time is not None:
@@ -197,10 +251,24 @@ DEFAULT_AGGREGATE_METRICS = [
     "Recall",
     "Brier",
     "ECE (10-bin)",
+    "ECE (15-bin)",
+    "ECE (20-bin)",
+    "AdaptiveECE (10-bin)",
     "LogLoss",
     "CalibrationSlope",
     "CalibrationIntercept",
+    "DecisionCost2x",
+    "DecisionCost2xRelApproveAll",
+    "DecisionCost5x",
+    "DecisionCost5xRelApproveAll",
+    "DecisionCost10x",
+    "DecisionCost10xRelApproveAll",
+    "DecisionCost20x",
+    "DecisionCost20xRelApproveAll",
     "FeatureCount",
+    "PreprocessTimeSec",
+    "ModelFitTimeSec",
+    "CalibrationTimeSec",
     "TrainTimeSec",
     "InferenceTimeSec",
     "PeakMemoryMB",
