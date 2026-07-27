@@ -22,7 +22,7 @@ def refresh_statuses(report: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Refresh RUA-P report-card and certificate assets from an existing report CSV.")
+    parser = argparse.ArgumentParser(description="Refresh RUA-P audit-profile assets from an existing report CSV.")
     parser.add_argument("--report-csv", default="paper_assets/ruap_audit/ruap_report_card.csv")
     parser.add_argument("--output-dir", default="paper_assets/ruap_audit")
     args = parser.parse_args()
@@ -35,15 +35,15 @@ def main() -> None:
     report.to_csv(output_dir / "ruap_report_card.csv", index=False)
     ruap.write_latex_tables(report, output_dir)
 
-    certificate = ruap.build_ruap_certificate(report)
-    certificate.to_csv(output_dir / "ruap_certificate.csv", index=False)
-    ruap.write_certificate_table(certificate, output_dir)
+    profile = ruap.build_ruap_certificate(report)
+    profile.to_csv(output_dir / "ruap_certificate.csv", index=False)
+    ruap.write_certificate_table(profile, output_dir)
 
     sensitivity = ruap.build_threshold_sensitivity(report)
     sensitivity.to_csv(output_dir / "ruap_threshold_sensitivity.csv", index=False)
     ruap.write_threshold_sensitivity_table(sensitivity, output_dir)
 
-    print(f"refreshed {len(report)} report rows and {len(certificate)} certificate rows in {output_dir}")
+    print(f"refreshed {len(report)} report rows and {len(profile)} decision-profile rows in {output_dir}")
 
 
 if __name__ == "__main__":

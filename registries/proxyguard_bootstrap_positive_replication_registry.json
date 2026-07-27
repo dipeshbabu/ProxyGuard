@@ -1,0 +1,76 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-26",
+  "purpose": "Informed prospective positive-control replication for mechanism-level ProxyGuard with relative transfer and absolute target-risk requirements.",
+  "analysis_status": "The design was fixed after the earlier 0.01-tolerance bootstrap pilot remained unresolved. The new study uses a different split, new release seeds, and wider predeclared limits. It is an informed replication, not a confirmatory reuse of the pilot target.",
+  "dataset": "taiwan_default",
+  "split_seed": 4921,
+  "release_mechanism": "Nonparametric row bootstrap of the source training table with replacement and unchanged sample size.",
+  "privacy_scope": "This is a nonprivate high-fidelity control. It supports no privacy or exposure claim.",
+  "releases": 30,
+  "release_seed_start": 92001,
+  "minimum_reliability": 0.8,
+  "total_alpha": 0.05,
+  "release_error_share": 0.5,
+  "bound_method": "empirical_bernstein",
+  "learning_procedure": {
+    "selection_measure": "validation normalized Cost5x",
+    "pipelines": [
+      "Logistic",
+      "Random forest",
+      "Histogram boosting"
+    ],
+    "randomness": "The source pipeline seed is fixed by split_seed and conditioned upon. Each proxy pipeline seed equals its prespecified release seed and is part of the release mechanism.",
+    "target_rule": "The source procedure is fitted once. Each bootstrap release selects its own procedure on the same development validation set. Target outcomes are used only for the final paired audit."
+  },
+  "requirements": [
+    {
+      "name": "Brier transfer",
+      "estimand": "relative_regret",
+      "value_column": "brier_regret",
+      "tolerance": 0.04,
+      "lower": -1.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Log-loss transfer",
+      "estimand": "relative_regret",
+      "value_column": "logloss_regret",
+      "tolerance": 0.04,
+      "lower": -1.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Cost5x transfer",
+      "estimand": "relative_regret",
+      "value_column": "cost5x_regret",
+      "tolerance": 0.04,
+      "lower": -1.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Proxy Brier risk",
+      "estimand": "absolute_risk",
+      "value_column": "brier_proxy",
+      "tolerance": 0.18,
+      "lower": 0.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Proxy log-loss risk",
+      "estimand": "absolute_risk",
+      "value_column": "logloss_proxy",
+      "tolerance": 0.07,
+      "lower": 0.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Proxy Cost5x risk",
+      "estimand": "absolute_risk",
+      "value_column": "cost5x_proxy",
+      "tolerance": 0.16,
+      "lower": 0.0,
+      "upper": 1.0
+    }
+  ]
+}

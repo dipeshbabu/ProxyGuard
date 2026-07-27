@@ -1,0 +1,14 @@
+{
+  "amendment_version": "1.0",
+  "frozen_on": "2026-07-26",
+  "parent_registry": "proxyguard_mechanism_registry.json",
+  "reason": "The initial registered run omitted the direct plug-in baseline that declares a mechanism reliable when the observed point-pass fraction reaches the reliability target. This amendment adds that baseline without changing the data-generating process, error levels, reliability targets, sample sizes, seeds, or repetitions.",
+  "added_baseline": {
+    "name": "Plug-in release fraction",
+    "release_label": "Every observed requirement mean is at or below its tolerance.",
+    "mechanism_rule": "The fraction of point-passing releases is at least the minimum reliability.",
+    "uncertainty_correction": "None",
+    "multiplicity_correction": "None"
+  },
+  "disclosure": "The baseline was added after inspecting the first registered run. Its results are reported as an amended diagnostic, not as part of the original prospective comparison."
+}

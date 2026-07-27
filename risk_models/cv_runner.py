@@ -172,6 +172,10 @@ def run_single_split(model_name: str, model, X, y, exp_cfg: ExperimentConfig, sp
         "y_test": y_test,
         "p_val": p_val_calibrated,
         "p_test": p_test,
+        "cost_thresholds": {
+            float(fn_cost): float(cost_threshold)
+            for fn_cost, (cost_threshold, _) in cost_thresholds.items()
+        },
         "feature_names": getattr(fitted_model, "feature_names_", None),
         "feature_ranking": feature_ranking() if callable(feature_ranking) else getattr(fitted_model, "feature_names_", None),
     }
@@ -261,6 +265,37 @@ def _build_feature_stability_table(dataset_name: str, artifacts: List[Dict[str, 
     return pd.DataFrame(rows)
 
 
+def _build_audit_records(
+    dataset_name: str,
+    artifacts: List[Dict[str, Any]],
+    subgroup_frame: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    rows: list[pd.DataFrame] = []
+    for artifact in artifacts:
+        test_index = pd.Index(artifact["test_index"])
+        frame = pd.DataFrame(
+            {
+                "Dataset": dataset_name,
+                "Model": artifact["Model"],
+                "split_seed": artifact["split_seed"],
+                "record_id": test_index.astype(str),
+                "y_true": np.asarray(artifact["y_test"], dtype=int),
+                "probability": np.asarray(artifact["p_test"], dtype=float),
+                "f1_threshold": float(artifact["threshold"]),
+            }
+        )
+        for fn_cost, threshold in sorted(artifact.get("cost_thresholds", {}).items()):
+            frame[f"cost_threshold_{int(fn_cost)}x"] = float(threshold)
+        if subgroup_frame is not None and not subgroup_frame.empty:
+            subgroup_test = subgroup_frame.loc[test_index].reset_index(drop=True)
+            for subgroup_name in subgroup_test.columns:
+                frame[f"subgroup__{subgroup_name}"] = subgroup_test[subgroup_name].to_numpy()
+        rows.append(frame)
+    if not rows:
+        return pd.DataFrame()
+    return pd.concat(rows, ignore_index=True)
+
+
 def _save_reliability_outputs(run_dir: Path, artifacts: List[Dict[str, Any]], exp_cfg: ExperimentConfig):
     if not exp_cfg.save_reliability:
         return
@@ -290,6 +325,7 @@ def _save_benchmark_outputs(
     subgroup_df: pd.DataFrame,
     feature_stability_df: pd.DataFrame,
     artifacts: List[Dict[str, Any]],
+    audit_records_df: pd.DataFrame | None = None,
 ):
     run_dir = Path(exp_cfg.output_root) / mode / dataset_name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -299,6 +335,7 @@ def _save_benchmark_outputs(
         aggregate_metrics=agg_df if exp_cfg.save_aggregate_metrics else None,
         subgroup_metrics=subgroup_df,
         feature_stability=feature_stability_df,
+        audit_records=audit_records_df if exp_cfg.save_audit_records else None,
     )
     _save_reliability_outputs(run_dir, artifacts, exp_cfg)
     return run_dir
@@ -313,6 +350,7 @@ def run_benchmark(dataset_config: DatasetConfig, model_configs: List[ModelConfig
     split_df, agg_df, artifacts = run_repeated_benchmark(model_registry, X, y, exp_cfg)
     subgroup_df = _build_subgroup_metrics(dataset_config.name, artifacts, subgroup_frame, exp_cfg)
     feature_stability_df = _build_feature_stability_table(dataset_config.name, artifacts)
+    audit_records_df = _build_audit_records(dataset_config.name, artifacts, subgroup_frame)
     run_dir = _save_benchmark_outputs(
         dataset_config.name,
         mode,
@@ -322,12 +360,14 @@ def run_benchmark(dataset_config: DatasetConfig, model_configs: List[ModelConfig
         subgroup_df,
         feature_stability_df,
         artifacts,
+        audit_records_df,
     )
     return {
         "split_metrics": split_df,
         "aggregate_metrics": agg_df,
         "subgroup_metrics": subgroup_df,
         "feature_stability": feature_stability_df,
+        "audit_records": audit_records_df,
         "artifacts": artifacts,
         "metadata": dataset_bundle["metadata"],
         "output_dir": str(run_dir),

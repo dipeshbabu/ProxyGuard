@@ -272,13 +272,13 @@ def build_ruap_report(proxy_results: pd.DataFrame, exposure: pd.DataFrame) -> pd
             if variant == "baseline":
                 status = "Original"
             elif not preserves_auc:
-                status = "Utility loss"
+                status = "Ranking-utility failure"
             elif reliability_warning:
-                status = "RUA-P fail"
+                status = "Decision-utility failure"
             elif exposure_reduced and not exposure_regressed:
-                status = "RUA-P pass"
+                status = "Requirements met"
             else:
-                status = "Exposure mixed"
+                status = "Conflicting exposure"
             rows.append(
                 {
                     "Dataset": dataset,
@@ -314,7 +314,7 @@ def build_ruap_certificate(
     auc_tol: float = 0.010,
     ece_tol: float = 0.005,
     cost_tol: float = 0.010,
-    exposure_tol: float = 0.010,
+    exposure_tol: float | dict[str, float] = 0.010,
 ) -> pd.DataFrame:
     transformed = report[report["Variant"] != "baseline"].copy()
     if transformed.empty:
@@ -327,9 +327,15 @@ def build_ruap_certificate(
         ]
     )
     exposure_columns = ["UniquenessDelta", "NearestNeighborRiskDelta", "SensitivePredictabilityDelta"]
+    if isinstance(exposure_tol, dict):
+        exposure_tolerances = np.asarray([exposure_tol[column] for column in exposure_columns], dtype=float)
+    else:
+        exposure_tolerances = np.full(len(exposure_columns), float(exposure_tol), dtype=float)
+    if np.any(exposure_tolerances <= 0):
+        raise ValueError("Exposure tolerances must be positive.")
     exposure_values = transformed[exposure_columns].to_numpy(dtype=float)
-    exposure_gain = np.where(np.isfinite(exposure_values), -exposure_values / exposure_tol, np.nan)
-    exposure_regression = np.where(np.isfinite(exposure_values), exposure_values / exposure_tol, np.nan)
+    exposure_gain = np.where(np.isfinite(exposure_values), -exposure_values / exposure_tolerances, np.nan)
+    exposure_regression = np.where(np.isfinite(exposure_values), exposure_values / exposure_tolerances, np.nan)
     transformed["M_+"] = np.nanmax(exposure_gain, axis=1)
     transformed["M_-"] = np.nanmax(exposure_regression, axis=1)
     transformed["UtilityFeasible"] = (
@@ -353,8 +359,8 @@ def build_ruap_certificate(
                 finite = np.isfinite(candidate_values) & np.isfinite(other_values)
                 if not finite.any():
                     continue
-                weak = np.all(other_values[finite] <= candidate_values[finite] + exposure_tol)
-                strict = np.any(other_values[finite] < candidate_values[finite] - exposure_tol)
+                weak = np.all(other_values[finite] <= candidate_values[finite] + exposure_tolerances[finite])
+                strict = np.any(other_values[finite] < candidate_values[finite] - exposure_tolerances[finite])
                 if weak and strict:
                     dominated = True
                     break
@@ -388,16 +394,16 @@ def write_latex_tables(report: pd.DataFrame, output_dir: Path) -> None:
     main = report[report["Variant"] != "baseline"].copy()
     lines = [
         "\\begin{table*}[t]",
-        "\\caption{RUA-P report card for transformed proxies. Deltas compare each transformed proxy with the original version of the same dataset. Lower ECE, Cost5x, uniqueness, and sensitive-predictability values are better.}",
+        "\\caption{Descriptive test-set extrema under proxy transformations. AUC, ECE, and cost can come from different learners; this table is not a model-selection procedure. Lower ECE, Cost5x, uniqueness, nearest-neighbor risk, and sensitive-attribute predictability are better.}",
         "\\label{tab:ruap_report}",
         "\\begin{center}",
         "\\begin{small}",
         "\\setlength{\\tabcolsep}{4pt}",
         "\\renewcommand{\\arraystretch}{1.06}",
         "\\resizebox{0.98\\textwidth}{!}{%",
-        "\\begin{tabular}{lllrrrrrrl}",
+        "\\begin{tabular}{lllrrrrrr}",
         "\\toprule",
-        "Dataset & Proxy & AUC winner & $\\Delta$AUC & $\\Delta$ECE & $\\Delta$Cost & $\\Delta$Unique & $\\Delta$NN & $\\Delta$Leak & Status \\\\",
+        "Dataset & Proxy & Highest AUC row & $\\Delta$AUC & $\\Delta$ECE & $\\Delta$Cost & $\\Delta$Unique & $\\Delta$NN & $\\Delta$Leak \\\\",
         "\\midrule",
     ]
     for _, row in main.iterrows():
@@ -406,8 +412,7 @@ def write_latex_tables(report: pd.DataFrame, output_dir: Path) -> None:
             f"{display(row['BestAUCModel'], DISPLAY_MODELS)} & {fmt_delta(row['AUCDelta'])} & "
             f"{fmt_delta(row['ECEDelta'])} & {fmt_delta(row['CostDelta'])} & "
             f"{fmt_delta(row['UniquenessDelta'])} & {fmt_delta(row['NearestNeighborRiskDelta'])} & "
-            f"{fmt_delta(row['SensitivePredictabilityDelta'])} & "
-            f"{row['Status']} \\\\"
+            f"{fmt_delta(row['SensitivePredictabilityDelta'])} \\\\"
         )
     lines.extend(
         [
@@ -423,8 +428,8 @@ def write_latex_tables(report: pd.DataFrame, output_dir: Path) -> None:
     (output_dir / "ruap_report_card.tex").write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_certificate_table(certificate: pd.DataFrame, output_dir: Path) -> None:
-    if certificate.empty:
+def write_certificate_table(profile: pd.DataFrame, output_dir: Path) -> None:
+    if profile.empty:
         return
     lines = [
         "\\begin{table}[t]",
@@ -435,10 +440,10 @@ def write_certificate_table(certificate: pd.DataFrame, output_dir: Path) -> None
         "\\resizebox{0.98\\textwidth}{!}{%",
         "\\begin{tabular}{llrrrll}",
         "\\toprule",
-        "Dataset & Proxy & $M_U$ & $M_+$ & $M_-$ & Frontier & Label \\\\",
+        "Dataset & Proxy & $M_U$ & $M_+$ & $M_-$ & Non-dominated & Decision state \\\\",
         "\\midrule",
     ]
-    for _, row in certificate.iterrows():
+    for _, row in profile.iterrows():
         frontier = "Yes" if bool(row["Frontier"]) else "No"
         lines.append(
             f"{display(row['Dataset'], DISPLAY_DATASETS)} & {display(row['Variant'], DISPLAY_VARIANTS)} & "
@@ -451,7 +456,7 @@ def write_certificate_table(certificate: pd.DataFrame, output_dir: Path) -> None
             "\\end{tabular}}",
             "\\end{small}",
             "\\end{center}",
-            "\\caption{RUA-P certificate and tolerance-aware frontier for the transformed-proxy audit. $M_U$ is the minimum normalized utility margin across AUC, ECE, and Cost5x; negative values fail a utility gate. $M_+$ is the strongest normalized exposure gain and $M_-$ is the strongest normalized exposure regression across reported exposure axes. Frontier entries are utility-feasible proxies for which no other utility-feasible proxy has tolerance-aware exposure dominance on the same dataset.}\\label{tab:ruap_certificate}",
+            "\\caption{Illustrative decision profile and non-dominated candidate set. Negative $M_U$ values indicate a failed utility requirement. $M_+$ and $M_-$ summarize the largest normalized exposure gain and regression. A non-dominated entry can still conflict with the original table because this set compares candidates only with one another.}\\label{tab:ruap_certificate}",
             "\\end{table}",
             "",
         ]
@@ -476,10 +481,10 @@ def write_ruap_report_plot(report: pd.DataFrame, output_dir: Path) -> None:
         ("SensitivePredictabilityDelta", "$\\Delta$Leak"),
     ]
     status_colors = {
-        "RUA-P pass": "#2a9d55",
-        "Exposure mixed": "#d19000",
-        "RUA-P fail": "#c43c39",
-        "Utility loss": "#6a5acd",
+        "Requirements met": "#2a9d55",
+        "Conflicting exposure": "#d19000",
+        "Decision-utility failure": "#c43c39",
+        "Ranking-utility failure": "#6a5acd",
     }
     fig, ax = plt.subplots(figsize=(10.8, 4.8))
     x_positions = np.arange(len(metrics))
@@ -524,32 +529,32 @@ def classify_status(
     auc_tol: float,
     ece_tol: float,
     cost_tol: float,
-    exposure_tol: float,
+    exposure_tol: float | dict[str, float],
 ) -> str:
     if row["Variant"] == "baseline":
         return "Original"
     preserves_auc = row["AUCDelta"] >= -auc_tol
     reliability_warning = row["ECEDelta"] > ece_tol or row["CostDelta"] > cost_tol
-    exposure_reduced = (
-        row["UniquenessDelta"] < -exposure_tol
-        or (np.isfinite(row["NearestNeighborRiskDelta"]) and row["NearestNeighborRiskDelta"] < -exposure_tol)
-        or (np.isfinite(row["SensitivePredictabilityDelta"]) and row["SensitivePredictabilityDelta"] < -exposure_tol)
+    exposure_columns = ["UniquenessDelta", "NearestNeighborRiskDelta", "SensitivePredictabilityDelta"]
+    if isinstance(exposure_tol, dict):
+        tolerances = {column: float(exposure_tol[column]) for column in exposure_columns}
+    else:
+        tolerances = {column: float(exposure_tol) for column in exposure_columns}
+    exposure_reduced = any(
+        np.isfinite(row[column]) and row[column] < -tolerances[column]
+        for column in exposure_columns
     )
     exposure_regressed = any(
-        np.isfinite(delta) and delta > exposure_tol
-        for delta in [
-            row["UniquenessDelta"],
-            row["NearestNeighborRiskDelta"],
-            row["SensitivePredictabilityDelta"],
-        ]
+        np.isfinite(row[column]) and row[column] > tolerances[column]
+        for column in exposure_columns
     )
     if not preserves_auc:
-        return "Utility loss"
+        return "Ranking-utility failure"
     if reliability_warning:
-        return "RUA-P fail"
+        return "Decision-utility failure"
     if exposure_reduced and not exposure_regressed:
-        return "RUA-P pass"
-    return "Exposure mixed"
+        return "Requirements met"
+    return "Conflicting exposure"
 
 
 def build_threshold_sensitivity(report: pd.DataFrame) -> pd.DataFrame:
@@ -577,10 +582,10 @@ def build_threshold_sensitivity(report: pd.DataFrame) -> pd.DataFrame:
                 "ECETolerance": ece_tol,
                 "CostTolerance": cost_tol,
                 "ExposureTolerance": exposure_tol,
-                "RUA-P pass": int(counts.get("RUA-P pass", 0)),
-                "Exposure mixed": int(counts.get("Exposure mixed", 0)),
-                "RUA-P fail": int(counts.get("RUA-P fail", 0)),
-                "Utility loss": int(counts.get("Utility loss", 0)),
+                "Requirements met": int(counts.get("Requirements met", 0)),
+                "Conflicting exposure": int(counts.get("Conflicting exposure", 0)),
+                "Decision-utility failure": int(counts.get("Decision-utility failure", 0)),
+                "Ranking-utility failure": int(counts.get("Ranking-utility failure", 0)),
             }
         )
     return pd.DataFrame(rows)
@@ -589,7 +594,7 @@ def build_threshold_sensitivity(report: pd.DataFrame) -> pd.DataFrame:
 def write_threshold_sensitivity_table(sensitivity: pd.DataFrame, output_dir: Path) -> None:
     lines = [
         "\\begin{table}[H]",
-        "\\caption{RUA-P threshold sensitivity under the clean-pass rule. Strict/default/loose settings vary the AUC, ECE, Cost5x, and exposure tolerances used for report-card labels; mixed rows preserve utility but have conflicting exposure deltas.}",
+        "\\caption{Counts under three illustrative tolerance settings. Conflicting profiles preserve utility while exposure probes move in opposite directions. These counts describe the optional policy layer, not the strength of the underlying evidence.}",
         "\\label{tab:ruap_threshold_sensitivity}",
         "\\begin{center}",
         "\\begin{small}",
@@ -597,13 +602,13 @@ def write_threshold_sensitivity_table(sensitivity: pd.DataFrame, output_dir: Pat
         "\\renewcommand{\\arraystretch}{1.05}",
         "\\begin{tabular}{lrrrr}",
         "\\toprule",
-        "Setting & Clean pass & Mixed & Fail & Utility loss \\\\",
+        "Setting & Requirements met & Conflicting & Decision-utility failure & Ranking-utility failure \\\\",
         "\\midrule",
     ]
     for _, row in sensitivity.iterrows():
         lines.append(
-            f"{row['Setting']} & {int(row['RUA-P pass'])} & {int(row['Exposure mixed'])} & "
-            f"{int(row['RUA-P fail'])} & {int(row['Utility loss'])} \\\\"
+            f"{row['Setting']} & {int(row['Requirements met'])} & {int(row['Conflicting exposure'])} & "
+            f"{int(row['Decision-utility failure'])} & {int(row['Ranking-utility failure'])} \\\\"
         )
     lines.extend(
         [
@@ -723,9 +728,9 @@ def main() -> None:
     report = build_ruap_report(proxy_results, exposure)
     report.to_csv(output_dir / "ruap_report_card.csv", index=False)
     write_latex_tables(report, output_dir)
-    certificate = build_ruap_certificate(report)
-    certificate.to_csv(output_dir / "ruap_certificate.csv", index=False)
-    write_certificate_table(certificate, output_dir)
+    profile = build_ruap_certificate(report)
+    profile.to_csv(output_dir / "ruap_certificate.csv", index=False)
+    write_certificate_table(profile, output_dir)
     write_ruap_report_plot(report, output_dir)
     threshold_sensitivity = build_threshold_sensitivity(report)
     threshold_sensitivity.to_csv(output_dir / "ruap_threshold_sensitivity.csv", index=False)

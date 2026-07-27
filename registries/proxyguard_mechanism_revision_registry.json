@@ -1,0 +1,130 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-26",
+  "purpose": "Prospective revision registry addressing near-boundary inner multiplicity, directional error budgets, alpha-allocation sensitivity, and a new AIM mechanism replication.",
+  "near_boundary_inner_correction": {
+    "total_alpha": 0.05,
+    "release_error_share": 0.5,
+    "minimum_reliability": 0.8,
+    "valid_reliability": 0.98,
+    "requirements": 3,
+    "mechanisms": 5,
+    "releases": 200,
+    "audit_size": 500,
+    "tolerance": 0.1,
+    "safe_release_risk": 0.02,
+    "bad_release_risks": [
+      0.1,
+      0.101,
+      0.102,
+      0.12
+    ],
+    "repetitions": 10000,
+    "seed": 2607281,
+    "primary_outcomes": [
+      "familywise probability of recognizing at least one invalid release",
+      "familywise probability of validating at least one boundary-reliable mechanism"
+    ]
+  },
+  "alpha_allocation": {
+    "total_alpha": 0.05,
+    "release_error_shares": [
+      0.1,
+      0.25,
+      0.5,
+      0.75,
+      0.9
+    ],
+    "minimum_reliability": 0.8,
+    "valid_reliability": 0.98,
+    "requirements": 3,
+    "mechanisms": 5,
+    "releases": 25,
+    "audit_size": 500,
+    "tolerance": 0.1,
+    "safe_release_risk": 0.02,
+    "bad_release_risk": 0.102,
+    "repetitions": 10000,
+    "seed": 2607282,
+    "selection_rule": "The split is fixed before outcomes; no allocation is selected post hoc. The paper reports the full registered grid."
+  },
+  "risk_control": {
+    "alpha": 0.05,
+    "bound_method": "empirical_bernstein",
+    "requirements": [
+      {
+        "name": "Brier",
+        "tolerance": 0.01,
+        "lower": -1.0,
+        "upper": 1.0
+      },
+      {
+        "name": "Clipped log loss",
+        "tolerance": 0.01,
+        "lower": -1.0,
+        "upper": 1.0,
+        "probability_clip": 1e-06
+      },
+      {
+        "name": "Cost5x",
+        "tolerance": 0.01,
+        "lower": -1.0,
+        "upper": 1.0
+      }
+    ]
+  },
+  "modern_generators": {
+    "aim": {
+      "implementation": "SmartNoise Synth 1.0.8",
+      "datasets": [
+        "taiwan_default"
+      ],
+      "epsilons": [
+        1.0
+      ],
+      "delta": 1e-09,
+      "releases_per_cell": 25,
+      "release_seeds": [
+        1155954205,
+        1968887059,
+        1573392686,
+        1670982559,
+        529495632,
+        537183196,
+        1219349959,
+        238778261,
+        1738261928,
+        2122425569,
+        1169153388,
+        1469493671,
+        1045598961,
+        677521771,
+        175552682,
+        1871581183,
+        56328099,
+        656195728,
+        1021216079,
+        548803274,
+        428947263,
+        464831402,
+        347572228,
+        1039525143,
+        1532520502
+      ],
+      "seed_sampling": "The 25 seeds were drawn before release generation from NumPy default_rng(260728), uniformly over integers [100000, 2147483647). The first seed also fixes a new 60/20/20 data split.",
+      "bins": 10,
+      "max_model_size": 40,
+      "num_marginals": 40
+    }
+  },
+  "prospective_aim_mechanism": {
+    "dataset": "taiwan_default",
+    "epsilon": 1.0,
+    "minimum_reliability": 0.8,
+    "total_alpha": 0.05,
+    "release_error_share": 0.5,
+    "primary_outcome": "mechanism status under the separate validation and violation guarantees",
+    "analysis_status": "Prospectively registered replication with a new target split and newly sampled release seeds. The choice of AIM epsilon=1 was informed by the earlier retrospective AIM analysis and is disclosed as such.",
+    "privacy_scope": "AIM retains its own differential privacy parameters. ProxyGuard evaluates registered downstream transfer and does not add a privacy guarantee."
+  }
+}

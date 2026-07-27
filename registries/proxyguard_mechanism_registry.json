@@ -1,0 +1,65 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-26",
+  "purpose": "Prospective specification for the mechanism-reliability and adaptive-search simulations added to ProxyGuard.",
+  "mechanism_reliability": {
+    "total_alpha": 0.05,
+    "release_error_share": 0.5,
+    "primary_minimum_reliability": 0.8,
+    "sensitivity_minimum_reliability": 0.9,
+    "requirements": 3,
+    "mechanisms": 5,
+    "tolerance": 0.1,
+    "safe_release_risk": 0.02,
+    "bad_release_risk": 0.12,
+    "boundary_reliability": 0.8,
+    "valid_reliability": 0.98,
+    "release_counts": [
+      10,
+      25,
+      50,
+      75
+    ],
+    "audit_sizes": [
+      100,
+      250,
+      500
+    ],
+    "repetitions": 5000,
+    "seed": 260726
+  },
+  "adaptive_search": {
+    "total_alpha": 0.05,
+    "requirements": 3,
+    "tolerance": 0.1,
+    "boundary_risk": 0.1,
+    "nonbinding_risk": 0.02,
+    "valid_risk": 0.02,
+    "audit_size": 250,
+    "rounds": [
+      1,
+      5,
+      10,
+      25,
+      50
+    ],
+    "valid_arrival_rounds": [
+      1,
+      5,
+      10,
+      25,
+      50
+    ],
+    "repetitions": 5000,
+    "seed": 260727,
+    "spending": "6 alpha / (pi^2 t^2)",
+    "assumption": "Each proposed candidate is evaluated on a fresh target batch that was not used to choose it."
+  },
+  "real_release_reanalysis": {
+    "source": "outputs/proxyguard_repeated_aim/paired_losses.csv",
+    "release_count": 45,
+    "mechanism_configurations": 9,
+    "primary_minimum_reliability": 0.8,
+    "analysis_status": "Retrospective extension. The AIM releases and their release-level outcomes existed before this mechanism-level specification, so the result is not described as prospectively registered."
+  }
+}

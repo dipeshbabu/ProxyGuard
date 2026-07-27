@@ -17,7 +17,7 @@ from scripts.build_ruap_audit import DISPLAY_DATASETS, DISPLAY_VARIANTS
 DATASET_DISPLAY = {
     **DISPLAY_DATASETS,
     "heart_disease": "Heart",
-    "mammographic_mass": "Mammo",
+    "mammographic_mass": "Mammography",
     "breast_cancer_wdbc": "WDBC",
     "give_me_some_credit": "GMSC",
 }

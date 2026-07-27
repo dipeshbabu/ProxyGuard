@@ -1,0 +1,136 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-27",
+  "analysis_status": "Prospective sealed-target mechanism audit. The audit reserve was sampled uniformly without labels from a dataset not used in earlier project experiments. Requirements and release seeds were frozen before the sealed audit file was parsed.",
+  "dataset": {
+    "name": "MAGIC Gamma Telescope",
+    "uci_id": 159,
+    "doi": "10.24432/C52C8B",
+    "archive_path": "data\\uci_magic_gamma\\magic_gamma.zip",
+    "archive_sha256": "252e0a78333c108d0ea54537b61154aa781e95a15675e65ddf9b76993617191d",
+    "raw_path": "data\\uci_magic_gamma\\magic04.data",
+    "raw_sha256": "e9314b7ebd4b4b59a3b3d65f7316663963777b16a46786877651dbbaa640b36a",
+    "records": 19020,
+    "positive_class": "h"
+  },
+  "partition": {
+    "rule": "Uniform record sample without replacement; labels not read.",
+    "reserve_seed": 27072701,
+    "audit_fraction": 0.3,
+    "development_records": 13314,
+    "audit_records": 5706,
+    "development_path": "data\\uci_magic_gamma\\sealed_v1\\development.data",
+    "development_sha256": "7dbf025fd83c57fddf8f7151e4df0f3bf87c5f7ee226fcf1c1d197a173fafed2",
+    "development_positions_path": "data\\uci_magic_gamma\\sealed_v1\\development_positions.csv",
+    "development_positions_sha256": "5cf21a9287cb4c510f4a5fb8d34cfc319712a65a49381c903360ae68b8abdfeb",
+    "sealed_audit_path": "data\\uci_magic_gamma\\sealed_v1\\sealed_audit.data",
+    "sealed_audit_sha256": "94b0414c4333ee95b0931cb8129c6334661fdee9d2655beba3e81d4e429123e1",
+    "audit_positions_path": "data\\uci_magic_gamma\\sealed_v1\\audit_positions.csv",
+    "audit_positions_sha256": "4871e7e5f3423ca1fc6516b06a65e042ab42885b0431ebe89898a67c3fa64d35",
+    "audit_outcomes_inspected_during_preparation": false
+  },
+  "development": {
+    "split_seed": 27072702,
+    "validation_fraction": 0.2,
+    "source_model": "Random forest",
+    "source_threshold": 0.222,
+    "absolute_limit_rule": "Ceiling equals source validation risk plus 0.05, rounded upward to three decimals.",
+    "source_validation_risks": {
+      "Brier": 0.0907920535535352,
+      "NormalizedClippedLogLoss": 0.021703658676370828,
+      "NormalizedCost5x": 0.05790461885092002
+    }
+  },
+  "mechanism": {
+    "name": "Nonparametric row bootstrap",
+    "description": "Sample source-training rows with replacement at the original training size; each release selects its own registered pipeline on the shared development validation set.",
+    "releases": 30,
+    "release_seeds": [
+      127001,
+      127002,
+      127003,
+      127004,
+      127005,
+      127006,
+      127007,
+      127008,
+      127009,
+      127010,
+      127011,
+      127012,
+      127013,
+      127014,
+      127015,
+      127016,
+      127017,
+      127018,
+      127019,
+      127020,
+      127021,
+      127022,
+      127023,
+      127024,
+      127025,
+      127026,
+      127027,
+      127028,
+      127029,
+      127030
+    ]
+  },
+  "requirements": [
+    {
+      "name": "Brier transfer",
+      "estimand": "relative_regret",
+      "value_column": "brier_regret",
+      "tolerance": 0.04,
+      "lower": -1.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Log-loss transfer",
+      "estimand": "relative_regret",
+      "value_column": "logloss_regret",
+      "tolerance": 0.04,
+      "lower": -1.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Cost5x transfer",
+      "estimand": "relative_regret",
+      "value_column": "cost5x_regret",
+      "tolerance": 0.04,
+      "lower": -1.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Proxy Brier risk",
+      "estimand": "absolute_risk",
+      "value_column": "brier_proxy",
+      "tolerance": 0.141,
+      "lower": 0.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Proxy log-loss risk",
+      "estimand": "absolute_risk",
+      "value_column": "logloss_proxy",
+      "tolerance": 0.072,
+      "lower": 0.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Proxy Cost5x risk",
+      "estimand": "absolute_risk",
+      "value_column": "cost5x_proxy",
+      "tolerance": 0.108,
+      "lower": 0.0,
+      "upper": 1.0
+    }
+  ],
+  "minimum_reliability": 0.8,
+  "total_alpha": 0.05,
+  "release_error_share": 0.5,
+  "bound_method": "empirical_bernstein",
+  "privacy_scope": "Nonprivate high-fidelity control; no privacy or exposure claim."
+}

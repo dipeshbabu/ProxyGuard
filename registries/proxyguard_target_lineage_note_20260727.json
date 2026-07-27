@@ -1,0 +1,44 @@
+{
+  "note_version": "1.0",
+  "recorded_on": "2026-07-27",
+  "status": "Post hoc data-lineage correction",
+  "dataset": "taiwan_default",
+  "records": 30000,
+  "registries_checked": {
+    "pilot": {
+      "path": "registries/proxyguard_bootstrap_mechanism_registry.json",
+      "sha256": "f4e3a21a917fb4bf116097227f0afbe011964e3fd2961b624a797968b8ca3a9b",
+      "split_seed": 3609
+    },
+    "aim_informed_rerun": {
+      "path": "registries/proxyguard_mechanism_revision_registry.json",
+      "sha256": "31ed1b1596439bcc8eed4652a33e95792faf4eae51241dfb067015f2b3494fd7",
+      "split_seed": 1155954205
+    },
+    "bootstrap_informed_rerun": {
+      "path": "registries/proxyguard_bootstrap_positive_replication_registry.json",
+      "sha256": "29498fed0d7be262bc85da36b126658f7b65b1ac7a35152d5d54cbccc73f0def",
+      "split_seed": 4921
+    }
+  },
+  "findings": [
+    {
+      "study": "AIM informed rerun",
+      "replication_audit_records": 6000,
+      "overlap_pilot_train": 3623,
+      "overlap_pilot_validation": 1169,
+      "overlap_pilot_audit": 1208,
+      "overlap_any_pilot_role": 6000
+    },
+    {
+      "study": "Bootstrap informed positive-control rerun",
+      "replication_audit_records": 6000,
+      "overlap_pilot_train": 3598,
+      "overlap_pilot_validation": 1184,
+      "overlap_pilot_audit": 1218,
+      "overlap_any_pilot_role": 6000
+    }
+  ],
+  "interpretation": "Both reruns reshuffled a finite table that had already been partitioned in the pilot. Every rerun audit record had appeared in a pilot role. The numerical reliability bounds are retained as same-table sensitivity summaries and are not presented as theorem-backed prospective guarantees.",
+  "reproduction_command": "python scripts/proxyguard/audit_proxyguard_target_lineage.py"
+}

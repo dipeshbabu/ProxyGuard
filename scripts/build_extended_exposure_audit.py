@@ -61,7 +61,7 @@ DATASET_DISPLAY = {
     **DISPLAY_DATASETS,
     "give_me_some_credit": "GMSC",
     "heart_disease": "Heart",
-    "mammographic_mass": "Mammo",
+    "mammographic_mass": "Mammography",
     "breast_cancer_wdbc": "WDBC",
 }
 
@@ -277,6 +277,48 @@ def write_latex_table(table: pd.DataFrame, output_dir: Path) -> None:
     (output_dir / "extended_exposure_stress.tex").write_text("\n".join(lines), encoding="utf-8")
 
 
+def write_compact_latex_table(table: pd.DataFrame, output_dir: Path) -> None:
+    """Write the representative transforms used in the manuscript appendix."""
+    compact_variants = ["coarsen_quartile", "sensitive_mask", "dp_marginal_e1"]
+    rows = table[table["Variant"].isin(compact_variants)].copy()
+    order = {variant: index for index, variant in enumerate(compact_variants)}
+    rows["VariantOrder"] = rows["Variant"].map(order)
+    rows = rows.sort_values(["Dataset", "VariantOrder"])
+    lines = [
+        "\\begin{table}[H]",
+        "\\begin{center}",
+        "\\begin{small}",
+        "\\setlength{\\tabcolsep}{4pt}",
+        "\\renewcommand{\\arraystretch}{1.04}",
+        "\\begin{tabular}{llrrrrr}",
+        "\\toprule",
+        "Dataset & Transform & $\\Delta$Unique & $\\Delta$NN & $\\Delta$Leak & $\\Delta$AuxLink & $\\Delta$MemAUC \\\\",
+        "\\midrule",
+    ]
+    for _, row in rows.iterrows():
+        lines.append(
+            f"{DATASET_DISPLAY.get(row['Dataset'], row['Dataset'])} & "
+            f"{DISPLAY_VARIANTS.get(row['Variant'], str(row['Variant']).replace('_', ' '))} & "
+            f"{fmt_delta(row['UniquenessRateDelta'])} & {fmt_delta(row['NearestNeighborRiskDelta'])} & "
+            f"{fmt_delta(row['SensitivePredictabilityDelta'])} & {fmt_delta(row['AuxLinkAUCDelta'])} & "
+            f"{fmt_delta(row['MemberAUCDelta'])} \\\\"
+        )
+    lines.extend(
+        [
+            "\\bottomrule",
+            "\\end{tabular}",
+            "\\end{small}",
+            "\\end{center}",
+            "\\caption{Representative all-dataset exposure screen. Deltas compare each transform with the original table; lower values are better. The released CSV contains all 100 dataset--transform cells.}\\label{tab:extended_exposure_app}",
+            "\\end{table}",
+        ]
+    )
+    (output_dir / "extended_exposure_compact.tex").write_text(
+        "\n".join(lines),
+        encoding="utf-8",
+    )
+
+
 def main() -> None:
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
     parser = argparse.ArgumentParser(description="Build an all-dataset RUA-P exposure stress screen.")
@@ -296,6 +338,7 @@ def main() -> None:
         table = build_extended_exposure_table(parse_csv(args.datasets), parse_csv(args.variants), args.seed, args.max_rows)
         table.to_csv(output_dir / "extended_exposure_stress.csv", index=False)
     write_latex_table(table, output_dir)
+    write_compact_latex_table(table, output_dir)
     print(f"wrote {len(table)} extended exposure rows to {output_dir}")
 
 

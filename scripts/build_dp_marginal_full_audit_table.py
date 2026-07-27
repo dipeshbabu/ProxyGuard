@@ -78,7 +78,7 @@ def write_latex(table: pd.DataFrame, output_dir: Path) -> None:
         "\\resizebox{0.92\\textwidth}{!}{%",
         "\\begin{tabular}{llrrrrr}",
         "\\toprule",
-        "Dataset & Completed models & Best DP model & $\\Delta$AUC & $\\Delta$ECE & $\\Delta$Cost & $\\Delta$Leak / $\\Delta$MemAUC \\\\",
+        "Dataset & Completed models & Highest-AUC model & $\\Delta$AUC & $\\Delta$ECE & $\\Delta$Cost & $\\Delta$Leak / $\\Delta$MemAUC \\\\",
         "\\midrule",
     ]
     for _, row in table.iterrows():
@@ -93,7 +93,7 @@ def write_latex(table: pd.DataFrame, output_dir: Path) -> None:
             "\\end{tabular}}",
             "\\end{small}",
             "\\end{center}",
-            "\\caption{DP marginal full-audit check on the three main proxy datasets. Deltas compare the best completed DP marginal row with the original-table baseline over the same completed model set for that dataset. Lower ECE, Cost5x, Leak, and MemAUC deltas are better.}",
+            "\\caption{DP marginal check on the three main proxy datasets. The displayed row has the highest test AUC among completed models and is descriptive, not a selection procedure. Deltas use the original-table baseline over the same model set. Lower ECE, Cost5x, Leak, and MemAUC deltas are better.}",
             "\\label{tab:dp_marginal_full_audit}",
             "\\end{table}",
         ]

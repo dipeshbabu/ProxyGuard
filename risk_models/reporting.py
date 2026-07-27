@@ -63,6 +63,7 @@ def save_run_artifacts(
     aggregate_metrics: Optional[pd.DataFrame] = None,
     subgroup_metrics: Optional[pd.DataFrame] = None,
     feature_stability: Optional[pd.DataFrame] = None,
+    audit_records: Optional[pd.DataFrame] = None,
 ):
     ensure_directory(run_dir)
     if split_metrics is not None:
@@ -78,6 +79,8 @@ def save_run_artifacts(
         )
     if subgroup_metrics is not None and not subgroup_metrics.empty:
         save_dataframe(subgroup_metrics, run_dir / "subgroup_metrics.csv")
+    if audit_records is not None and not audit_records.empty:
+        save_dataframe(audit_records, run_dir / "audit_records.csv")
     if feature_stability is not None and not feature_stability.empty:
         save_dataframe(feature_stability, run_dir / "feature_stability.csv")
     if aggregate_metrics is not None:

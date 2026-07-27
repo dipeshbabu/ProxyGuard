@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 import matplotlib
+import numpy as np
 import pandas as pd
 from scipy.stats import wilcoxon
 
@@ -879,6 +880,140 @@ def plot_auc_ece_tradeoff(summary: pd.DataFrame, path: Path) -> None:
     plt.close(fig)
 
 
+def plot_metric_extrema(summary: pd.DataFrame, path: Path) -> None:
+    """Plot the model and value at each dataset's AUC and ECE extrema."""
+    table = summary[summary["Model"].isin(PAPER_MODELS)].copy()
+    if table.empty:
+        return
+
+    dataset_order = [
+        dataset for dataset in DISPLAY_DATASETS if dataset in set(table["Dataset"])
+    ]
+    auc_rows = (
+        table.loc[table.groupby("Dataset")["AUC"].idxmax()]
+        .set_index("Dataset")
+        .loc[dataset_order]
+    )
+    ece_rows = (
+        table.loc[table.groupby("Dataset")["ECE (10-bin)"].idxmin()]
+        .set_index("Dataset")
+        .loc[dataset_order]
+    )
+    same_model = auc_rows["Model"].eq(ece_rows["Model"]).to_numpy()
+    y = np.arange(len(dataset_order))
+
+    fig, (auc_axis, ece_axis) = plt.subplots(
+        1,
+        2,
+        figsize=(7.2, 4.2),
+        sharey=True,
+        gridspec_kw={"wspace": 0.08},
+    )
+
+    for axis in (auc_axis, ece_axis):
+        for row_index, is_same in enumerate(same_model):
+            if is_same:
+                axis.axhspan(
+                    row_index - 0.46,
+                    row_index + 0.46,
+                    color="#f1f3f5",
+                    zorder=0,
+                )
+        axis.grid(axis="x", color="#d7dce2", linewidth=0.7, linestyle=":")
+        axis.set_axisbelow(True)
+        axis.spines["top"].set_visible(False)
+        axis.spines["right"].set_visible(False)
+        axis.spines["left"].set_visible(False)
+        axis.tick_params(axis="y", length=0)
+        axis.tick_params(axis="x", labelsize=9)
+
+    auc_values = auc_rows["AUC"].to_numpy(dtype=float)
+    auc_errors = auc_rows["AUC_ci95"].to_numpy(dtype=float)
+    auc_axis.errorbar(
+        auc_values,
+        y,
+        xerr=auc_errors,
+        fmt="o",
+        color="#1f5a8a",
+        ecolor="#7aa6c2",
+        elinewidth=1.4,
+        capsize=2.5,
+        markersize=6,
+        zorder=3,
+    )
+    for row_index, (value, model) in enumerate(
+        zip(auc_values, auc_rows["Model"], strict=True)
+    ):
+        offset = -7 if value > 0.94 else 7
+        alignment = "right" if offset < 0 else "left"
+        auc_axis.annotate(
+            DISPLAY_MODELS.get(model, model),
+            (value, row_index),
+            xytext=(offset, 0),
+            textcoords="offset points",
+            va="center",
+            ha=alignment,
+            fontsize=8.6,
+            color="#18364d",
+        )
+
+    ece_values = ece_rows["ECE (10-bin)"].to_numpy(dtype=float)
+    ece_errors = ece_rows["ECE (10-bin)_ci95"].to_numpy(dtype=float)
+    ece_axis.errorbar(
+        ece_values,
+        y,
+        xerr=ece_errors,
+        fmt="o",
+        color="#a44a2a",
+        ecolor="#d29a84",
+        elinewidth=1.4,
+        capsize=2.5,
+        markersize=6,
+        zorder=3,
+    )
+    for row_index, (value, model) in enumerate(
+        zip(ece_values, ece_rows["Model"], strict=True)
+    ):
+        offset = -7 if value > 0.14 else 7
+        alignment = "right" if offset < 0 else "left"
+        ece_axis.annotate(
+            DISPLAY_MODELS.get(model, model),
+            (value, row_index),
+            xytext=(offset, 0),
+            textcoords="offset points",
+            va="center",
+            ha=alignment,
+            fontsize=8.6,
+            color="#65301f",
+        )
+
+    auc_axis.set_yticks(y)
+    auc_axis.set_yticklabels(
+        [DISPLAY_DATASETS[dataset] for dataset in dataset_order],
+        fontsize=9.2,
+    )
+    auc_axis.invert_yaxis()
+    auc_axis.set_xlim(0.54, 1.015)
+    ece_axis.set_xlim(-0.008, 0.208)
+    auc_axis.set_xlabel("AUC (higher is better)", fontsize=9.5)
+    ece_axis.set_xlabel("ECE (lower is better)", fontsize=9.5)
+    auc_axis.set_title("(a) Highest observed AUC", fontsize=10.5, loc="left")
+    ece_axis.set_title("(b) Lowest observed ECE", fontsize=10.5, loc="left")
+    fig.text(
+        0.995,
+        0.018,
+        "Gray rows: same model in both panels",
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        color="#4b5563",
+    )
+    fig.subplots_adjust(left=0.16, right=0.99, bottom=0.15, top=0.91, wspace=0.08)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
 def plot_weak_label_sensitivity(weak_label: pd.DataFrame, path: Path, dataset: str = "german_credit") -> None:
     if weak_label.empty:
         return
@@ -1026,6 +1161,7 @@ def main() -> None:
     write_ece_sensitivity_latex(summary, asset_root / "ece_sensitivity_table.tex")
     write_weak_label_latex(weak_label, asset_root / "weak_label_two_dataset_table.tex")
     plot_auc_ece_tradeoff(summary, asset_root / "auc_ece_tradeoff.png")
+    plot_metric_extrema(summary, asset_root / "metric_extrema.png")
     plot_weak_label_sensitivity(weak_label, asset_root / "weak_label_sensitivity.png", dataset="german_credit")
     plot_weak_label_sensitivity(
         weak_label,

@@ -1,0 +1,22 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-26",
+  "purpose": "Test whether selecting a proxy on the target audit and then reusing that audit inflates false validation.",
+  "seed": 4821,
+  "repetitions": 5000,
+  "candidates": 20,
+  "requirements": 3,
+  "audit_records": 500,
+  "tolerance": 0.1,
+  "invalid_gap": 0.002,
+  "safe_risk": 0.02,
+  "alpha": 0.05,
+  "candidate_construction": "Every candidate has one Bernoulli requirement at tolerance plus invalid_gap; its other requirements have safe_risk.",
+  "selection_rule": "Choose the candidate with the smallest exact intersection-union p-value on the screening target.",
+  "comparisons": [
+    "Test the selected candidate without correction on the same target records.",
+    "Test the selected candidate without correction on a fresh independent target audit.",
+    "Apply Holm to the complete screened family on the original target records."
+  ],
+  "primary_endpoint": "Probability of validating at least one invalid candidate."
+}

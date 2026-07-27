@@ -203,6 +203,46 @@ def write_latex(table: pd.DataFrame, output_dir: Path) -> None:
     (output_dir / "adaptive_attack_screen.tex").write_text("\n".join(lines), encoding="utf-8")
 
 
+def write_compact_latex(table: pd.DataFrame, output_dir: Path) -> None:
+    """Write the two attack controls discussed in the manuscript."""
+    compact_variants = ["sensitive_mask", "dp_marginal_e1"]
+    rows = table[table["Variant"].isin(compact_variants)].copy()
+    variant_order = {variant: i for i, variant in enumerate(compact_variants)}
+    rows["VariantOrder"] = rows["Variant"].map(variant_order)
+    rows = rows.sort_values(["Dataset", "VariantOrder"])
+    lines = [
+        "\\begin{table}[H]",
+        "\\begin{center}",
+        "\\begin{small}",
+        "\\setlength{\\tabcolsep}{7pt}",
+        "\\renewcommand{\\arraystretch}{1.06}",
+        "\\begin{tabular}{llrr}",
+        "\\toprule",
+        "Dataset & Transform & Attack AUC & $\\Delta$Attack AUC \\\\",
+        "\\midrule",
+    ]
+    for _, row in rows.iterrows():
+        lines.append(
+            f"{DATASET_DISPLAY.get(row['Dataset'], row['Dataset'])} & "
+            f"{DISPLAY_VARIANTS.get(row['Variant'], row['Variant'].replace('_', ' '))} & "
+            f"{fmt(row['AdaptiveAttackAUC'])} & {fmt_delta(row['AdaptiveAttackDelta'])} \\\\"
+        )
+    lines.extend(
+        [
+            "\\bottomrule",
+            "\\end{tabular}",
+            "\\end{small}",
+            "\\end{center}",
+            "\\caption{Nearest-release attack results for sensitive masking and the DP marginal control. Deltas use the original-table attack AUC as the baseline; lower is better. The released CSV contains all 50 cells.}\\label{tab:adaptive_attack_app}",
+            "\\end{table}",
+        ]
+    )
+    (output_dir / "adaptive_attack_compact.tex").write_text(
+        "\n".join(lines),
+        encoding="utf-8",
+    )
+
+
 def main() -> None:
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
     parser = argparse.ArgumentParser(description="Build adaptive attack screen for RUA-P.")
@@ -217,6 +257,7 @@ def main() -> None:
     table = build_table(parse_csv(args.datasets), parse_csv(args.variants), seed=args.seed, max_rows=args.max_rows)
     table.to_csv(output_dir / "adaptive_attack_screen.csv", index=False)
     write_latex(table, output_dir)
+    write_compact_latex(table, output_dir)
     print(f"wrote {len(table)} adaptive attack rows to {output_dir}")
 
 

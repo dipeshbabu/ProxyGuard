@@ -53,6 +53,7 @@ class ExperimentConfig:
     save_aggregate_metrics: bool = True
     save_shap: bool = False
     save_reliability: bool = True
+    save_audit_records: bool = False
 
 
 def clone_dataset_config(config: DatasetConfig, **updates: Any) -> DatasetConfig:

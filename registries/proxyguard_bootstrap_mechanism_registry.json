@@ -1,0 +1,44 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-26",
+  "purpose": "Prospective positive-control study for mechanism-level ProxyGuard.",
+  "dataset": "taiwan_default",
+  "split_seed": 3609,
+  "release_mechanism": "Nonparametric row bootstrap of the source training table with replacement and unchanged sample size.",
+  "privacy_scope": "This is a nonprivate fidelity control. It is not a synthetic-data privacy mechanism and supports no exposure claim.",
+  "releases": 30,
+  "release_seed_start": 81001,
+  "minimum_reliability": 0.8,
+  "total_alpha": 0.05,
+  "release_error_share": 0.5,
+  "bound_method": "empirical_bernstein",
+  "learning_procedure": {
+    "selection_measure": "validation normalized Cost5x",
+    "pipelines": [
+      "Logistic",
+      "Random forest",
+      "Histogram boosting"
+    ],
+    "target_rule": "The source procedure is fitted once. Each bootstrap release selects its own procedure on the same development validation set. Target outcomes are used only for the final paired audit."
+  },
+  "requirements": [
+    {
+      "name": "Brier",
+      "tolerance": 0.01,
+      "lower": -1.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Clipped log loss",
+      "tolerance": 0.01,
+      "lower": -1.0,
+      "upper": 1.0
+    },
+    {
+      "name": "Cost5x",
+      "tolerance": 0.01,
+      "lower": -1.0,
+      "upper": 1.0
+    }
+  ]
+}

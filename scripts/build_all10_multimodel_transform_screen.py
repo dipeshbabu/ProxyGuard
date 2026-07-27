@@ -21,7 +21,7 @@ DATASET_DISPLAY = {
     "breast_cancer_wdbc": "WDBC",
     "give_me_some_credit": "GMSC",
     "heart_disease": "Heart",
-    "mammographic_mass": "Mammo",
+    "mammographic_mass": "Mammography",
 }
 
 MODEL_DISPLAY = {

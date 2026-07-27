@@ -18,6 +18,7 @@ from risk_models.configs import (
     get_spotlight_model_configs,
 )
 from risk_models.cv_runner import (
+    _build_audit_records,
     _build_feature_stability_table,
     _build_subgroup_metrics,
     _model_configs_to_registry,
@@ -42,6 +43,7 @@ CSV_KEYS = {
     "split_metrics.csv": ["Model", "split_seed"],
     "subgroup_metrics.csv": ["Dataset", "Model", "split_seed", "SubgroupName", "SubgroupValue"],
     "feature_stability.csv": ["Dataset", "Model"],
+    "audit_records.csv": ["Dataset", "Model", "split_seed", "record_id"],
 }
 
 
@@ -323,6 +325,7 @@ def run_one_proxy_model(dataset_name: str, variant: str, model_config, X: pd.Dat
     split_df, agg_df, artifacts = run_repeated_benchmark(model_registry, X, y, exp_cfg)
     subgroup_df = _build_subgroup_metrics(dataset_name, artifacts, subgroup_frame, exp_cfg)
     feature_stability_df = _build_feature_stability_table(dataset_name, artifacts)
+    audit_records_df = _build_audit_records(dataset_name, artifacts, subgroup_frame)
     run_dir = Path(exp_cfg.output_root) / "proxy_transform" / variant / dataset_name
     previous = read_existing_outputs(run_dir)
     _save_benchmark_outputs(
@@ -334,6 +337,7 @@ def run_one_proxy_model(dataset_name: str, variant: str, model_config, X: pd.Dat
         subgroup_df=subgroup_df,
         feature_stability_df=feature_stability_df,
         artifacts=artifacts,
+        audit_records_df=audit_records_df,
     )
     merge_saved_csvs(run_dir, previous)
     return agg_df
@@ -394,6 +398,7 @@ def main() -> None:
         run_subgroups=not args.no_subgroups,
         save_reliability=False,
         save_shap=False,
+        save_audit_records=True,
     )
     model_names = set(parse_csv(args.models))
     rows = []

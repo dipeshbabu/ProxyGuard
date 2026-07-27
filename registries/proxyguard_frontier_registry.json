@@ -1,0 +1,217 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-26",
+  "purpose": "Prospective registry for the ProxyGuard frontier experiments. Parameters below are fixed before the corresponding outcomes are inspected.",
+  "risk_control": {
+    "alpha": 0.05,
+    "bound_method": "empirical_bernstein",
+    "candidate_multiplicity": "Holm",
+    "requirements": [
+      {
+        "name": "Brier",
+        "tolerance": 0.01,
+        "lower": -1.0,
+        "upper": 1.0
+      },
+      {
+        "name": "Clipped log loss",
+        "tolerance": 0.01,
+        "lower": -1.0,
+        "upper": 1.0,
+        "probability_clip": 1e-06
+      },
+      {
+        "name": "Cost5x",
+        "tolerance": 0.01,
+        "lower": -1.0,
+        "upper": 1.0
+      }
+    ],
+    "decision_states": [
+      "Validated",
+      "Violation detected",
+      "Unresolved"
+    ]
+  },
+  "learning_procedure": {
+    "selection_measure": "validation normalized Cost5x",
+    "pipelines": [
+      "Logistic",
+      "Random forest",
+      "Histogram boosting"
+    ],
+    "audit_rule": "Models and decision thresholds are selected before the untouched audit outcomes are evaluated."
+  },
+  "modern_generators": {
+    "aim": {
+      "implementation": "SmartNoise Synth",
+      "datasets": [
+        "heart_disease",
+        "german_credit",
+        "taiwan_default"
+      ],
+      "epsilons": [
+        1.0,
+        5.0,
+        10.0
+      ],
+      "delta": 1e-09,
+      "releases_per_cell": 5,
+      "release_seeds": [
+        3407,
+        4407,
+        5407,
+        6407,
+        7407
+      ],
+      "bins": 10,
+      "max_model_size": 40,
+      "num_marginals": 40
+    },
+    "tabddpm": {
+      "implementation": "official Yandex Research tab-ddpm repository",
+      "repository": "https://github.com/yandex-research/tab-ddpm",
+      "commit": "b476257dd460b778ba09eb97f7a51d6490fa17f8",
+      "datasets": [
+        "heart_disease",
+        "german_credit",
+        "taiwan_default"
+      ],
+      "releases_per_dataset": 1,
+      "seed": 2026,
+      "training_steps": 5000,
+      "diffusion_steps": 100,
+      "batch_size": 4096,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0,
+      "normalization": "standard",
+      "model": {
+        "type": "mlp",
+        "d_layers": [
+          256,
+          256,
+          256
+        ],
+        "dropout": 0.0,
+        "dim_t": 128
+      },
+      "qualification": "This is the lowest training budget in the authors' published tuning grid, not a claim of dataset-specific optimal tuning."
+    }
+  },
+  "attack_suite": {
+    "scope": "attack-suite-conditional; no unconditional privacy or release claim",
+    "release_scope": "AIM release 1 for each dataset-epsilon cell and every registered TabDDPM release",
+    "membership_sets": {
+      "members": "records used to train the synthesizer",
+      "nonmembers": "untouched audit records",
+      "reference": "validation records not used to train the synthesizer"
+    },
+    "representation": {
+      "preprocessing": "median imputation, standardization, one-hot encoding when needed",
+      "pca_dimensions": 10,
+      "fit_scope": "reference records only",
+      "kde_jitter": 1e-06
+    },
+    "attacks": [
+      {
+        "name": "DOMIAS-KDE",
+        "score": "KDE(synthetic) / KDE(reference)",
+        "bandwidth": "Scott rule as implemented by scipy.stats.gaussian_kde"
+      },
+      {
+        "name": "Gen-LRA",
+        "score": "KDE log-likelihood influence over the 10 nearest synthetic neighbours",
+        "bandwidth": "Silverman rule",
+        "neighbors": 10
+      },
+      {
+        "name": "density-only KDE",
+        "score": "KDE(synthetic)"
+      },
+      {
+        "name": "DCR",
+        "score": "negative distance to closest synthetic record"
+      }
+    ],
+    "metrics": [
+      "ROC AUC",
+      "TPR at 1% FPR",
+      "TPR at 5% FPR"
+    ],
+    "subsample_limits": {
+      "members": 500,
+      "nonmembers": 500,
+      "reference": 1000,
+      "synthetic": 2000
+    },
+    "attacker_seeds": [
+      911,
+      1011,
+      1111,
+      1211,
+      1311,
+      1411,
+      1511,
+      1611,
+      1711,
+      1811
+    ],
+    "bootstrap_repetitions": 500,
+    "bootstrap_seed": 911,
+    "confidence_level": 0.95,
+    "risk_controlled_claim": {
+      "attacker_seed": 911,
+      "threshold_calibration_fpr": 0.05,
+      "attack_advantage_ceiling": 0.05,
+      "nonmember_threshold_fraction": 0.5,
+      "bound_method": "hoeffding",
+      "estimand": "finite-pool mean attack advantage over the registered member and nonmember pools",
+      "sampling": "uniform subsampling without replacement; the threshold-calibration nonmembers are disjoint from the attack-audit nonmembers",
+      "interpretation": "Illustrative attack-suite policy: TPR minus FPR must be below 0.05 for every registered attack. This is not a universal privacy threshold."
+    }
+  },
+  "out_of_mechanism_calibration": {
+    "repetitions": 5000,
+    "seed": 701,
+    "candidates": 6,
+    "requirements": 3,
+    "audit_sizes": [
+      250,
+      1000
+    ],
+    "held_out_families": [
+      "continuous beta regrets",
+      "rare-subgroup mixture regrets",
+      "correlated candidate regrets"
+    ],
+    "primary_outcome": "family-wise probability of validating at least one invalid candidate"
+  },
+  "shift_audits": {
+    "temporal": {
+      "dataset": "UCI Bank Marketing",
+      "source": "2008 records",
+      "proxy": "2009 records",
+      "target": "2010 records"
+    },
+    "site": {
+      "dataset": "UCI Heart Disease",
+      "source": "Cleveland",
+      "proxy": "Hungarian",
+      "target": "Switzerland and VA Long Beach pooled"
+    },
+    "schema": {
+      "dataset": "UCI Adult",
+      "source": "full-schema source cohort",
+      "proxy": "disjoint reduced-schema cohort",
+      "target": "untouched target cohort",
+      "removed_fields": [
+        "age",
+        "race",
+        "sex",
+        "native-country",
+        "capital-gain",
+        "capital-loss"
+      ]
+    }
+  }
+}
