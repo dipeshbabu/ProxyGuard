@@ -37,6 +37,7 @@ def build_real_mechanism_audit(
     minimum_reliability: float,
     total_alpha: float,
     release_error_share: float,
+    mechanism_count_mode: str = "holm",
     bound_method: str = "empirical_bernstein",
 ) -> MechanismAuditResult:
     required_columns = {
@@ -67,6 +68,7 @@ def build_real_mechanism_audit(
         minimum_reliability=minimum_reliability,
         total_alpha=total_alpha,
         release_error_share=release_error_share,
+        mechanism_count_mode=mechanism_count_mode,
         bound_method=bound_method,
     )
 
@@ -116,6 +118,12 @@ def main() -> None:
         "--output-root",
         default="outputs/proxyguard_mechanism_audit",
     )
+    parser.add_argument(
+        "--mechanism-count-mode",
+        choices=("holm", "simes"),
+        default="holm",
+        help="Aggregate release evidence by release-level Holm certification or Simes count.",
+    )
     args = parser.parse_args()
 
     registry_path = Path(args.registry)
@@ -136,11 +144,13 @@ def main() -> None:
     primary = build_real_mechanism_audit(
         losses,
         minimum_reliability=primary_reliability,
+        mechanism_count_mode=args.mechanism_count_mode,
         **common,
     )
     sensitivity = build_real_mechanism_audit(
         losses,
         minimum_reliability=sensitivity_reliability,
+        mechanism_count_mode=args.mechanism_count_mode,
         **common,
     )
     primary_summary = add_mechanism_diagnostics(
@@ -179,6 +189,7 @@ def main() -> None:
                 "analysis_status": real_settings["analysis_status"],
                 "primary_minimum_reliability": primary_reliability,
                 "sensitivity_minimum_reliability": sensitivity_reliability,
+                "mechanism_count_mode": args.mechanism_count_mode,
                 **common,
             },
             indent=2,

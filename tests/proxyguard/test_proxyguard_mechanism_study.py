@@ -6,6 +6,9 @@ from scripts.proxyguard.run_proxyguard_mechanism_study import (
     MECHANISM_METHODS,
     build_planning_table,
     holm_rejections,
+    holm_release_counts,
+    release_collective_simes_counts,
+    release_partial_conjunction_counts,
     release_validation_counts,
     run_adaptive_study,
     run_mechanism_study,
@@ -112,3 +115,40 @@ def test_release_planning_accounts_for_reliability_and_multiplicity() -> None:
         planning.loc[(0.8, 9), "AllRecognizedGoodReleasesNeeded"]
         > planning.loc[(0.8, 1), "AllRecognizedGoodReleasesNeeded"]
     )
+
+
+def test_partial_conjunction_respects_partial_conjunction_formula() -> None:
+    release_pvalues = np.array(
+        [
+            [
+                [0.01, 0.02, 0.05, 0.20],  # sorted: 0.01,0.02,0.05,0.20
+            ],
+        ],
+        dtype=float,
+    )
+    # For R=4:
+    # k=1: 4*0.01 = 0.04 -> reject
+    # k=2: 2*0.02 = 0.04 -> reject
+    # k=3: 1.333*0.05 = 0.0667 -> reject
+    # k=4: 1*0.20 = 0.20 -> not reject
+    expected = np.array([[3]])
+    got = release_partial_conjunction_counts(release_pvalues, release_alpha=0.07)
+    assert got.shape == (1, 1)
+    assert got.tolist() == expected.tolist()
+
+
+def test_collective_simes_count_is_not_looser_than_holm() -> None:
+    release_pvalues = np.array(
+        [
+            [
+                [0.001, 0.02, 0.03, 0.25],
+                [0.10, 0.12, 0.14, 0.16],
+                [0.001, 0.40, 0.50, 0.90],
+            ]
+        ],
+        dtype=float,
+    )
+    alpha = 0.05
+    partial = release_collective_simes_counts(release_pvalues, release_alpha=alpha)
+    holm = holm_release_counts(release_pvalues, release_alpha=alpha)
+    assert (partial >= holm).all()

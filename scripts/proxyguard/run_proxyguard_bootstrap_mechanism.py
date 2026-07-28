@@ -160,6 +160,7 @@ def _absolute_risk_baselines(
 def run_bootstrap_mechanism(
     registry: dict,
     release_limit: int | None = None,
+    mechanism_count_mode: str = "holm",
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     dataset_name = str(registry["dataset"])
     bundle = load_dataset(get_dataset_config(dataset_name))
@@ -271,6 +272,7 @@ def run_bootstrap_mechanism(
         minimum_reliability=float(registry["minimum_reliability"]),
         total_alpha=float(registry["total_alpha"]),
         release_error_share=float(registry["release_error_share"]),
+        mechanism_count_mode=mechanism_count_mode,
         bound_method=str(registry["bound_method"]),
     )
     diagnostics_frame = pd.DataFrame(diagnostics)
@@ -319,6 +321,12 @@ def main() -> None:
         type=int,
         help="Run only the first registered releases for a smoke test.",
     )
+    parser.add_argument(
+        "--mechanism-count-mode",
+        choices=("holm", "simes"),
+        default="holm",
+        help="Aggregate release evidence by release-level Holm certification or Simes count.",
+    )
     args = parser.parse_args()
 
     registry_path = Path(args.registry)
@@ -329,7 +337,11 @@ def main() -> None:
         mechanism_summary,
         losses,
         baselines,
-    ) = run_bootstrap_mechanism(registry, release_limit=args.release_limit)
+    ) = run_bootstrap_mechanism(
+        registry,
+        release_limit=args.release_limit,
+        mechanism_count_mode=args.mechanism_count_mode,
+    )
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     release_summary.to_csv(output_root / "release_summary.csv", index=False)
@@ -343,6 +355,7 @@ def main() -> None:
                 "registry": str(registry_path),
                 "registry_sha256_file": str(registry_path.with_suffix(".sha256")),
                 "release_limit": args.release_limit,
+                "mechanism_count_mode": args.mechanism_count_mode,
                 "privacy_scope": registry["privacy_scope"],
             },
             indent=2,

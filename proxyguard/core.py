@@ -332,6 +332,51 @@ def mechanism_violation_pvalue(
     return float(binom.cdf(maximum_good, releases, minimum_reliability))
 
 
+def mechanism_release_lower_count(
+    candidate_frame: pd.DataFrame,
+    mode: str,
+    release_alpha: float,
+) -> int:
+    """Convert release outcomes into a conservative lower bound on valid releases.
+
+    Parameters
+    ----------
+    mode:
+      - ``"holm"``: count releases that pass individual Holm validation.
+      - ``"simes"``: compute a collective lower bound on the number of valid
+        releases using Simes-style partial-conjunction scores.
+
+    The Simes mode can be less conservative and is intended to provide stronger
+    mechanism-only evidence under the standard independence/PRDS regime for
+    p-values.
+    """
+
+    if not 0.0 < release_alpha <= 1.0:
+        raise ValueError("release_alpha must be in (0, 1].")
+    frame = candidate_frame.copy()
+    if frame.empty:
+        return 0
+    if "CandidatePValue" not in frame:
+        raise ValueError("candidate_frame must include CandidatePValue.")
+
+    release_pvalues = frame["CandidatePValue"].to_numpy(dtype=float)
+    releases = int(release_pvalues.size)
+    if mode == "holm":
+        return int(frame["Validated"].sum())
+    if mode != "simes":
+        raise ValueError(
+            "mechanism_count_mode must be 'holm' or 'simes'."
+        )
+
+    if releases == 0:
+        return 0
+    ranked = np.sort(release_pvalues)
+    index = np.arange(1, releases + 1, dtype=float)
+    scaled = np.minimum(1.0, (releases / index) * ranked)
+    scaled = np.maximum.accumulate(scaled)
+    return int(np.sum(scaled <= release_alpha))
+
+
 def audit_proxy_mechanisms(
     candidate_regrets: Mapping[str, Mapping[str, Sequence[float]]],
     release_to_mechanism: Mapping[str, str],
@@ -341,6 +386,7 @@ def audit_proxy_mechanisms(
     release_error_share: float = 0.5,
     violation_total_alpha: float | None = None,
     violation_release_error_share: float | None = None,
+    mechanism_count_mode: str = "holm",
     bound_method: str = "empirical_bernstein",
 ) -> MechanismAuditResult:
     """Audit realized releases and the mechanisms that generated them.
@@ -359,6 +405,16 @@ def audit_proxy_mechanisms(
     mechanism and must be generated without target-audit feedback. They may
     share target records because the inner release audit already controls
     arbitrary dependence across its p-values.
+
+    Parameters
+    ----------
+    mechanism_count_mode:
+      - ``"holm"`` (default): count only individually validated releases
+        before applying the mechanism binomial test (guaranteed under arbitrary
+        dependence from shared targets).
+      - ``"simes"``: use a collective lower-bound count on the number of
+        valid releases, which is typically less conservative under
+        independence/PRDS assumptions on release p-values.
     """
 
     if not 0.0 < total_alpha < 1.0:
@@ -411,12 +467,20 @@ def audit_proxy_mechanisms(
     upper_interval_error = violation_mechanism_alpha / mechanism_count
     validity_pvalues: dict[str, float] = {}
     violation_pvalues: dict[str, float] = {}
-    counts: dict[str, tuple[int, int, int]] = {}
+    counts: dict[str, tuple[int, int, int, int]] = {}
     for mechanism, frame in grouped:
         releases = int(len(frame))
-        validated = int(frame["Validated"].sum())
+        validated = mechanism_release_lower_count(
+            frame,
+            mode=mechanism_count_mode,
+            release_alpha=release_alpha,
+        )
+        individual_validated = int(frame["Validated"].sum())
         violations = int(frame["ViolationDetected"].sum())
-        counts[str(mechanism)] = (releases, validated, violations)
+        # Store both collective and individually validated counts; the
+        # mechanism-level decision can use either form depending on the
+        # selected reporting mode.
+        counts[str(mechanism)] = (releases, validated, violations, individual_validated)
         validity_pvalues[str(mechanism)] = mechanism_validity_pvalue(
             validated,
             releases,
@@ -432,7 +496,7 @@ def audit_proxy_mechanisms(
     violation_adjusted = holm_adjust(violation_pvalues)
     rows: list[dict[str, float | int | str | bool]] = []
     for mechanism in sorted(counts):
-        releases, validated, violations = counts[mechanism]
+        releases, validated, violations, individual_validated = counts[mechanism]
         validity_rejected = validity_adjusted[mechanism] <= mechanism_alpha
         violation_rejected = (
             violation_adjusted[mechanism] <= violation_mechanism_alpha
@@ -448,6 +512,7 @@ def audit_proxy_mechanisms(
                 "Mechanism": mechanism,
                 "Releases": releases,
                 "ValidatedReleases": validated,
+                "IndividuallyValidatedReleases": individual_validated,
                 "DetectedReleaseViolations": violations,
                 "MinimumReliability": minimum_reliability,
                 "ReliabilityLCB": clopper_pearson_lower_bound(
@@ -479,6 +544,7 @@ def audit_proxy_mechanisms(
                 "ViolationReleaseErrorRate": violation_release_alpha,
                 "ViolationMechanismErrorRate": violation_mechanism_alpha,
                 "ViolationTotalErrorRate": violation_total_alpha,
+                "MechanismCountMode": mechanism_count_mode,
             }
         )
 

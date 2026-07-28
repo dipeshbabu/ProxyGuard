@@ -341,6 +341,7 @@ def run_sealed_audit(
     *,
     registry_path: Path,
     output_root: Path,
+    mechanism_count_mode: str = "holm",
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     expected_registry_hash = (
@@ -469,6 +470,7 @@ def run_sealed_audit(
         minimum_reliability=float(registry["minimum_reliability"]),
         total_alpha=float(registry["total_alpha"]),
         release_error_share=float(registry["release_error_share"]),
+        mechanism_count_mode=mechanism_count_mode,
         bound_method=str(registry["bound_method"]),
     )
     diagnostics_frame = pd.DataFrame(diagnostics)
@@ -541,6 +543,12 @@ def main() -> None:
         "--output-root",
         default="outputs/proxyguard_magic_sealed_mechanism",
     )
+    audit.add_argument(
+        "--mechanism-count-mode",
+        choices=("holm", "simes"),
+        default="holm",
+        help="Aggregate release evidence by release-level Holm certification or Simes count.",
+    )
     args = parser.parse_args()
 
     if args.command == "prepare":
@@ -574,6 +582,7 @@ def main() -> None:
     _, _, mechanism_summary = run_sealed_audit(
         registry_path=Path(args.registry),
         output_root=Path(args.output_root),
+        mechanism_count_mode=args.mechanism_count_mode,
     )
     print(
         mechanism_summary.to_string(

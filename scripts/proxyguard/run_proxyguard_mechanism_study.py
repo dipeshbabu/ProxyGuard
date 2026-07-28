@@ -18,6 +18,7 @@ MECHANISM_METHODS = (
     "Point rule + binomial",
     "Per-release IUT + binomial",
     "Two-level ProxyGuard",
+    "Collective Simes release evidence",
     "Oracle release labels",
 )
 
@@ -37,6 +38,55 @@ def holm_rejections(pvalues: np.ndarray, alpha: float) -> np.ndarray:
     rows = np.arange(repetitions)[:, None]
     rejected[rows, order] = rejected_ordered
     return rejected
+
+
+def release_collective_simes_counts(
+    release_pvalues: np.ndarray, release_alpha: float
+) -> np.ndarray:
+    """Compute a collective Simes-style lower bound on valid release count.
+
+    The score is based on sorted release p-values:
+
+    p_k * (R / k)
+    """
+
+    if release_pvalues.ndim != 3:
+        raise ValueError("release_pvalues must have shape (repetitions, mechanisms, releases).")
+    if not 0 < release_alpha <= 1:
+        raise ValueError("release_alpha must lie in (0, 1].")
+    repetitions, mechanisms, releases = release_pvalues.shape
+    release_pvalues = np.asarray(release_pvalues, dtype=float)
+    ranked = np.sort(release_pvalues, axis=2)
+    index = np.arange(1, releases + 1, dtype=float)[None, None, :]
+    threshold = (releases / index) * ranked
+    partial_p = np.minimum(1.0, threshold)
+    partial_p_monotone = np.maximum.accumulate(partial_p, axis=2)
+    return (partial_p_monotone <= release_alpha).sum(axis=2).astype(int)
+
+
+def release_partial_conjunction_counts(
+    release_pvalues: np.ndarray, release_alpha: float
+) -> np.ndarray:
+    """Backward-compatible wrapper for collective release evidence.
+
+    Historically this was implemented as Holm-style conjunction.
+    We now use the Simes-style collective bound.
+    """
+
+    return release_collective_simes_counts(release_pvalues, release_alpha=release_alpha)
+
+
+def holm_release_counts(release_pvalues: np.ndarray, release_alpha: float) -> np.ndarray:
+    """Count Holm-certified releases from per-release p-values."""
+
+    if release_pvalues.ndim != 3:
+        raise ValueError("release_pvalues must have shape (repetitions, mechanisms, releases).")
+    repetitions, mechanisms, releases = release_pvalues.shape
+    validated = holm_rejections(
+        release_pvalues.reshape(repetitions * mechanisms, releases),
+        release_alpha,
+    ).reshape(repetitions, mechanisms, releases)
+    return validated.sum(axis=2)
 
 
 def exact_badness_pvalues(
@@ -77,16 +127,26 @@ def release_validation_counts(
 
     point_validated = (counts / audit_size <= tolerance).all(axis=3)
     per_release_validated = release_pvalues <= release_alpha
-    family_validated = holm_rejections(
-        release_pvalues.reshape(repetitions, mechanisms * releases),
-        release_alpha,
-    ).reshape(repetitions, mechanisms, releases)
+    family_validated = np.empty_like(per_release_validated, dtype=bool)
+    for mechanism_index in range(mechanisms):
+        family_validated[:, mechanism_index, :] = holm_rejections(
+            release_pvalues[:, mechanism_index, :],
+            release_alpha,
+        )
+
+    collective_evidence = release_collective_simes_counts(
+        release_pvalues, release_alpha=release_alpha
+    )
+    holm_counts = holm_release_counts(release_pvalues, release_alpha)
+    if not np.all(collective_evidence >= holm_counts):
+        raise RuntimeError("Collective count dropped below Holm count.")
 
     return {
         "Plug-in release fraction": point_validated.sum(axis=2),
         "Point rule + binomial": point_validated.sum(axis=2),
         "Per-release IUT + binomial": per_release_validated.sum(axis=2),
         "Two-level ProxyGuard": family_validated.sum(axis=2),
+        "Collective Simes release evidence": collective_evidence,
         "Oracle release labels": truly_good.sum(axis=2),
     }
 
@@ -155,6 +215,7 @@ def simulate_mechanism_setting(
             outer_alpha = (
                 mechanism_alpha
                 if method in {"Per-release IUT + binomial", "Two-level ProxyGuard"}
+                or method == "Collective Simes release evidence"
                 else total_alpha
             )
             boundary_rejections = outer_rejections(
@@ -329,6 +390,7 @@ def plot_mechanism_study(summary: pd.DataFrame, output_path: Path) -> None:
         "Point rule + binomial": "#777777",
         "Per-release IUT + binomial": "#d95f02",
         "Two-level ProxyGuard": "#1b9e77",
+        "Collective Simes release evidence": "#e7298a",
         "Oracle release labels": "#7570b3",
     }
     markers = {
@@ -336,6 +398,7 @@ def plot_mechanism_study(summary: pd.DataFrame, output_path: Path) -> None:
         "Point rule + binomial": "D",
         "Per-release IUT + binomial": "^",
         "Two-level ProxyGuard": "o",
+        "Collective Simes release evidence": "P",
         "Oracle release labels": "s",
     }
     largest_audit = int(summary["AuditN"].max())

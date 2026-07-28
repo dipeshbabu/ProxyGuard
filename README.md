@@ -84,6 +84,15 @@ python scripts/proxyguard/run_proxyguard_magic_sealed_mechanism.py audit
 python scripts/proxyguard/audit_proxyguard_target_lineage.py
 ```
 
+By default, mechanism audits use Holm-certified release counts for mechanism-level
+reliability. To use the collective Simes-style release-evidence mode, pass:
+
+```bash
+python scripts/proxyguard/run_proxyguard_bootstrap_mechanism.py --mechanism-count-mode simes
+python scripts/proxyguard/run_proxyguard_magic_sealed_mechanism.py audit --mechanism-count-mode simes
+python scripts/proxyguard/run_proxyguard_mechanism_audit.py ... --mechanism-count-mode simes
+```
+
 The MAGIC audit is a nonprivate fidelity control. Its `prepare` command
 selects and hashes an unlabeled reserve, fixes the requirements and release
 seeds from the remaining development records, and writes a frozen registry.

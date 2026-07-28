@@ -15,6 +15,7 @@ from proxyguard.core import (
     empirical_bernstein_upper_bound,
     hoeffding_badness_pvalue,
     holm_adjust,
+    mechanism_release_lower_count,
     mechanism_validity_pvalue,
     mechanism_violation_pvalue,
     paired_prediction_losses,
@@ -218,6 +219,44 @@ def test_mechanism_tail_pvalues_reward_consistent_release_evidence() -> None:
     assert violation_strong < violation_weak
 
 
+def test_mechanism_release_lower_count_modes_are_valid() -> None:
+    frame = pd.DataFrame(
+        {
+            "CandidatePValue": [0.001, 0.02, 0.2, 0.6],
+            "Validated": [True, False, False, False],
+        }
+    )
+    holm_count = mechanism_release_lower_count(
+        frame,
+        mode="holm",
+        release_alpha=0.05,
+    )
+    simes_count = mechanism_release_lower_count(
+        frame,
+        mode="simes",
+        release_alpha=0.05,
+    )
+
+    assert holm_count == 1
+    assert simes_count == 2
+    assert simes_count >= holm_count
+
+
+def test_mechanism_release_lower_count_rejects_invalid_mode() -> None:
+    frame = pd.DataFrame(
+        {
+            "CandidatePValue": [0.02],
+            "Validated": [False],
+        }
+    )
+    with pytest.raises(ValueError, match="must be 'holm' or 'simes'"):
+        mechanism_release_lower_count(
+            frame,
+            mode="invalid",
+            release_alpha=0.05,
+        )
+
+
 def test_mechanism_audit_separates_validation_violation_and_low_release_count() -> None:
     requirement = [RiskRequirement("loss", tolerance=0.0)]
     candidate_regrets: dict[str, dict[str, np.ndarray]] = {}
@@ -279,6 +318,36 @@ def test_mechanism_audit_tracks_separate_directional_error_budgets() -> None:
     assert row["LowerBoundSimultaneousCoverage"] == pytest.approx(0.96)
     assert row["UpperBoundSimultaneousCoverage"] == pytest.approx(0.94)
     assert row["DisplayedPairJointCoverageLowerBound"] == pytest.approx(0.90)
+
+
+def test_mechanism_count_mode_is_recorded_and_returns_release_level_counts() -> None:
+    requirements = [RiskRequirement("loss", tolerance=0.0)]
+    release_count = 20
+    candidate_regrets: dict[str, dict[str, np.ndarray]] = {}
+    mapping: dict[str, str] = {}
+    for index in range(release_count):
+        candidate_regrets[f"mA::{index}"] = {"loss": np.full(500, -0.2)}
+        candidate_regrets[f"mB::{index}"] = {"loss": np.full(500, 0.2)}
+        mapping[f"mA::{index}"] = "mechanism_a"
+        mapping[f"mB::{index}"] = "mechanism_b"
+
+    result = audit_proxy_mechanisms(
+        candidate_regrets,
+        mapping,
+        requirements=requirements,
+        minimum_reliability=0.8,
+        mechanism_count_mode="simes",
+        total_alpha=0.05,
+    )
+    summary = result.mechanism_summary.set_index("Mechanism")
+
+    assert summary.loc["mechanism_a", "Status"] == "Mechanism validated"
+    assert summary.loc["mechanism_a", "MechanismCountMode"] == "simes"
+    assert (
+        int(summary.loc["mechanism_a", "IndividuallyValidatedReleases"])
+        == release_count
+    )
+    assert summary.loc["mechanism_b", "Status"] == "Reliability violation detected"
 
 
 def test_quadratic_spending_controls_an_unbounded_sequence() -> None:
