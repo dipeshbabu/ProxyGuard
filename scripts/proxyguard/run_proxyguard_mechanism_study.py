@@ -5,6 +5,8 @@ import json
 from math import ceil, log
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -142,7 +144,6 @@ def simulate_mechanism_setting(
         valid_reliability,
         release_alpha,
     )
-
     rows: list[dict[str, float | int | str]] = []
     for method in MECHANISM_METHODS:
         if method == "Plug-in release fraction":

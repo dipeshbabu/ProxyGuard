@@ -49,6 +49,9 @@ data/*
 paper/
 paper_assets/
 
+# Temporary scratch folders created during experiments
+tmp/
+
 # Model/checkpoint artifacts
 *.pkl
 *.joblib
