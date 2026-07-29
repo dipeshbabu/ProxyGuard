@@ -1,0 +1,79 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-28",
+  "analysis_status": "Partition and analysis rules frozen before any Spambase outcome was parsed.",
+  "dataset": {
+    "name": "UCI Spambase",
+    "doi": "10.24432/C53G6X",
+    "official_archive_url": "https://archive.ics.uci.edu/static/public/94/spambase.zip",
+    "archive_sha256": "813ac1df8effac70463c09c9c4b11e8803eefcab54771af66150852bcdcd1636",
+    "expected_rows": 4601,
+    "features": 57,
+    "target_column": 57,
+    "target_definition": "One minus the UCI spam indicator, so a false negative is a legitimate message classified as spam."
+  },
+  "partition": {
+    "reserve_seed": 940728,
+    "sealed_audit_rows": 1840,
+    "development_seed": 940729,
+    "development_validation_fraction": 0.2
+  },
+  "mechanism": {
+    "name": "spambase::aim_epsilon5",
+    "generator": "SmartNoise AIM",
+    "epsilon": 5.0,
+    "delta": 1e-06,
+    "bins": 8,
+    "max_model_size": 40,
+    "num_marginals": 40,
+    "release_count": 30,
+    "release_seeds": [
+      941000,
+      941001,
+      941002,
+      941003,
+      941004,
+      941005,
+      941006,
+      941007,
+      941008,
+      941009,
+      941010,
+      941011,
+      941012,
+      941013,
+      941014,
+      941015,
+      941016,
+      941017,
+      941018,
+      941019,
+      941020,
+      941021,
+      941022,
+      941023,
+      941024,
+      941025,
+      941026,
+      941027,
+      941028,
+      941029
+    ],
+    "randomness_claim": "Every release retrains AIM and resamples a table under its registered seed."
+  },
+  "claims": {
+    "relative_risk_tolerance": 0.06,
+    "absolute_limit_rule": "For each registered loss, round source validation risk plus 0.05 upward to the next 0.001.",
+    "losses": [
+      "Brier",
+      "normalized clipped log loss",
+      "normalized Cost5x"
+    ],
+    "minimum_reliability": 0.8,
+    "total_false_validation_alpha": 0.05,
+    "release_error_share": 0.5,
+    "violation_total_alpha": 0.05,
+    "violation_release_error_share": 0.5,
+    "mechanism_count_mode": "holm"
+  }
+}

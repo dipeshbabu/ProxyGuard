@@ -1,0 +1,39 @@
+{
+  "amendment_version": "1.0",
+  "dated": "2026-07-28",
+  "parent_registry": "registries/proxyguard_spambase_aim_audit.json",
+  "parent_registry_sha256": "d76eeeab475f5626453e083495c53254bfb95d074ae605784c39c8b9f4affe8d",
+  "timing": "Frozen after terminating the first AIM fit and before the sealed audit file was parsed.",
+  "reason": "The 57-feature AIM workload did not complete one release within twenty minutes, making 30 independent retrainings infeasible.",
+  "changes": {
+    "selected_feature_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "bins": 6,
+    "max_model_size": 20,
+    "num_marginals": 20
+  },
+  "unchanged": [
+    "sealed target rows and hashes",
+    "development rows",
+    "release seeds",
+    "release count",
+    "epsilon and delta",
+    "relative tolerance",
+    "absolute-limit rule",
+    "reliability target",
+    "error allocation"
+  ],
+  "audit_status": "No target outcome was parsed before this amendment."
+}

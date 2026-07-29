@@ -1,0 +1,67 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-28",
+  "stage": "pilot",
+  "analysis_status": "Exploratory planning study for correlated continuous multi-requirement direct inference.",
+  "direct_multirequirement_study": {
+    "seed": 8831041,
+    "repetitions": 200,
+    "mechanisms": 1,
+    "minimum_reliability": 0.8,
+    "total_alpha": 0.05,
+    "requirements": [
+      "relative_score",
+      "absolute_risk",
+      "decision_cost"
+    ],
+    "lower_bounds": [
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "upper_bounds": [
+      1.0,
+      1.0,
+      2.0
+    ],
+    "tolerances": [
+      0.1,
+      0.35,
+      0.8
+    ],
+    "valid_margin_low": 0.07,
+    "valid_margin_high": 0.1,
+    "margin_jitter": 0.008,
+    "invalid_margin_low": 0.001,
+    "invalid_margin_high": 0.05,
+    "shared_noise_scale": 0.08,
+    "requirement_noise_scale": 0.08,
+    "interaction_noise_scale": 0.04,
+    "planning_release_count": 1000,
+    "planning_target_records": 1000,
+    "planning_reliabilities": [
+      0.8,
+      0.9,
+      0.95
+    ],
+    "named_release_error_fractions": [
+      0.1,
+      0.25,
+      0.5,
+      0.75,
+      0.9
+    ],
+    "direct_target_error_fractions": [
+      0.25,
+      0.5,
+      0.75,
+      0.9
+    ],
+    "direct_normalized_slacks": [
+      0.05,
+      0.06,
+      0.07,
+      0.08
+    ]
+  }
+}

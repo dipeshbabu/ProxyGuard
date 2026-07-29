@@ -161,6 +161,7 @@ def run_bootstrap_mechanism(
     registry: dict,
     release_limit: int | None = None,
     mechanism_count_mode: str = "holm",
+    collective_dependence_verified: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     dataset_name = str(registry["dataset"])
     bundle = load_dataset(get_dataset_config(dataset_name))
@@ -273,6 +274,7 @@ def run_bootstrap_mechanism(
         total_alpha=float(registry["total_alpha"]),
         release_error_share=float(registry["release_error_share"]),
         mechanism_count_mode=mechanism_count_mode,
+        collective_dependence_verified=collective_dependence_verified,
         bound_method=str(registry["bound_method"]),
     )
     diagnostics_frame = pd.DataFrame(diagnostics)
@@ -327,6 +329,14 @@ def main() -> None:
         default="holm",
         help="Aggregate release evidence by release-level Holm certification or Simes count.",
     )
+    parser.add_argument(
+        "--collective-dependence-verified",
+        action="store_true",
+        help=(
+            "Assert that Simes mode has independent audit batches or a "
+            "registered PRDS justification."
+        ),
+    )
     args = parser.parse_args()
 
     registry_path = Path(args.registry)
@@ -341,6 +351,7 @@ def main() -> None:
         registry,
         release_limit=args.release_limit,
         mechanism_count_mode=args.mechanism_count_mode,
+        collective_dependence_verified=args.collective_dependence_verified,
     )
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
@@ -356,6 +367,7 @@ def main() -> None:
                 "registry_sha256_file": str(registry_path.with_suffix(".sha256")),
                 "release_limit": args.release_limit,
                 "mechanism_count_mode": args.mechanism_count_mode,
+                "collective_dependence_verified": args.collective_dependence_verified,
                 "privacy_scope": registry["privacy_scope"],
             },
             indent=2,

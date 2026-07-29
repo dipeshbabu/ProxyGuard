@@ -1,0 +1,39 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-28",
+  "purpose": "Diagnostic grid for the corrected collective mechanism-only extension.",
+  "analysis_status": "Frozen before the full grid was run.",
+  "dependence_condition": "Every release receives an independently generated Bernoulli audit batch. This experiment does not model shared target records.",
+  "collective_evidence": {
+    "total_alpha": 0.05,
+    "release_error_share": 0.5,
+    "requirements": 3,
+    "mechanisms": 5,
+    "tolerance": 0.1,
+    "safe_release_risks": [
+      0.04,
+      0.06,
+      0.08
+    ],
+    "bad_release_risk": 0.12,
+    "minimum_reliability": 0.8,
+    "valid_reliabilities": [
+      0.9,
+      0.95,
+      0.98
+    ],
+    "release_counts": [
+      25,
+      50,
+      100
+    ],
+    "audit_sizes": [
+      100,
+      250,
+      500,
+      1000
+    ],
+    "repetitions": 2000,
+    "seed": 260728
+  }
+}

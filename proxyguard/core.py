@@ -342,13 +342,15 @@ def mechanism_release_lower_count(
     Parameters
     ----------
     mode:
-      - ``"holm"``: count releases that pass individual Holm validation.
+      - ``"holm"``: count releases that pass Holm validation within the
+        mechanism at ``release_alpha``.
       - ``"simes"``: compute a collective lower bound on the number of valid
         releases using Simes-style partial-conjunction scores.
 
     The Simes mode can be less conservative and is intended to provide stronger
-    mechanism-only evidence under the standard independence/PRDS regime for
-    p-values.
+    mechanism-only evidence only when release p-values are independent or
+    satisfy a justified PRDS condition. Shared target records do not establish
+    that condition by themselves.
     """
 
     if not 0.0 < release_alpha <= 1.0:
@@ -362,7 +364,13 @@ def mechanism_release_lower_count(
     release_pvalues = frame["CandidatePValue"].to_numpy(dtype=float)
     releases = int(release_pvalues.size)
     if mode == "holm":
-        return int(frame["Validated"].sum())
+        adjusted = holm_adjust(
+            {
+                str(index): float(pvalue)
+                for index, pvalue in enumerate(release_pvalues)
+            }
+        )
+        return int(sum(value <= release_alpha for value in adjusted.values()))
     if mode != "simes":
         raise ValueError(
             "mechanism_count_mode must be 'holm' or 'simes'."
@@ -371,10 +379,26 @@ def mechanism_release_lower_count(
     if releases == 0:
         return 0
     ranked = np.sort(release_pvalues)
-    index = np.arange(1, releases + 1, dtype=float)
-    scaled = np.minimum(1.0, (releases / index) * ranked)
-    scaled = np.maximum.accumulate(scaled)
-    return int(np.sum(scaled <= release_alpha))
+
+    # Benjamini--Heller (partial-conjunction) evidence for at least k true
+    # hypotheses among R p-values:
+    #   p_PC(k) = min_{j=k..R} (R-k+1)/(j-k+1) * p_(j)
+    partial_conjunction_scores = np.empty(releases, dtype=float)
+    for k_index in range(releases):
+        k = k_index + 1
+        tail = ranked[k_index:]
+        scale = (releases - k + 1) / (
+            np.arange(k, releases + 1, dtype=float) - k + 1
+        )
+        pc = float(np.min(np.minimum(1.0, scale * tail)))
+        partial_conjunction_scores[k_index] = pc
+
+    # The partial-conjunction nulls are nested. Monotonizing the scores makes
+    # the inferred count coherent: support for at least k valid releases also
+    # requires support for every smaller count.
+    partial_conjunction_scores = np.maximum.accumulate(partial_conjunction_scores)
+    support = partial_conjunction_scores <= release_alpha
+    return int(np.where(support)[0].max(initial=-1) + 1)
 
 
 def audit_proxy_mechanisms(
@@ -387,6 +411,7 @@ def audit_proxy_mechanisms(
     violation_total_alpha: float | None = None,
     violation_release_error_share: float | None = None,
     mechanism_count_mode: str = "holm",
+    collective_dependence_verified: bool = False,
     bound_method: str = "empirical_bernstein",
 ) -> MechanismAuditResult:
     """Audit realized releases and the mechanisms that generated them.
@@ -401,10 +426,11 @@ def audit_proxy_mechanisms(
     uses a separate error budget. By default it has the same numerical split
     as validation, but the two guarantees remain direction-specific.
 
-    Releases within a mechanism must be independent draws from that
-    mechanism and must be generated without target-audit feedback. They may
-    share target records because the inner release audit already controls
-    arbitrary dependence across its p-values.
+    Releases within a mechanism must be independent draws from that mechanism
+    and must be generated without target-audit feedback. Holm mode permits
+    shared target records. Simes mode additionally requires independent or
+    demonstrably PRDS release p-values; shared target records do not imply
+    PRDS.
 
     Parameters
     ----------
@@ -414,7 +440,12 @@ def audit_proxy_mechanisms(
         dependence from shared targets).
       - ``"simes"``: use a collective lower-bound count on the number of
         valid releases, which is typically less conservative under
-        independence/PRDS assumptions on release p-values.
+        independence/PRDS assumptions on release p-values. Do not use this mode
+        merely because releases share a target sample.
+    collective_dependence_verified:
+        Must be set to ``True`` to use Simes mode. This records the auditor's
+        assertion that independent audit batches or a justified PRDS argument
+        is part of the registered design.
     """
 
     if not 0.0 < total_alpha < 1.0:
@@ -433,6 +464,11 @@ def audit_proxy_mechanisms(
         )
     if not 0.0 < minimum_reliability < 1.0:
         raise ValueError("minimum_reliability must lie strictly between zero and one.")
+    if mechanism_count_mode == "simes" and not collective_dependence_verified:
+        raise ValueError(
+            "Simes mechanism mode requires collective_dependence_verified=True "
+            "for independent or justified PRDS release p-values."
+        )
     if set(candidate_regrets) != set(release_to_mechanism):
         missing = sorted(set(candidate_regrets) - set(release_to_mechanism))
         extra = sorted(set(release_to_mechanism) - set(candidate_regrets))
@@ -461,8 +497,37 @@ def audit_proxy_mechanisms(
     release_summary = release_audit.candidate_summary.copy()
     release_summary["Mechanism"] = release_summary["Candidate"].map(release_to_mechanism)
 
+    mechanism_names = sorted(release_summary["Mechanism"].unique())
+    mechanism_count = len(mechanism_names)
+    # Equal local allocations give a global inner error budget by a union
+    # bound. A future API can expose preregistered unequal weights.
+    local_release_alpha = release_alpha / mechanism_count
+    for mechanism in mechanism_names:
+        mask = release_summary["Mechanism"].eq(mechanism)
+        frame = release_summary.loc[mask]
+        adjusted = holm_adjust(
+            {
+                str(row.Candidate): float(row.CandidatePValue)
+                for row in frame.itertuples(index=False)
+            }
+        )
+        release_summary.loc[mask, "HolmAdjustedPValue"] = [
+            adjusted[str(candidate)]
+            for candidate in release_summary.loc[mask, "Candidate"]
+        ]
+        release_summary.loc[mask, "Validated"] = (
+            release_summary.loc[mask, "HolmAdjustedPValue"] <= local_release_alpha
+        )
+    release_summary["Status"] = np.where(
+        release_summary["Validated"],
+        "Validated",
+        np.where(
+            release_summary["ViolationDetected"],
+            "Violation detected",
+            "Unresolved",
+        ),
+    )
     grouped = list(release_summary.groupby("Mechanism", sort=True))
-    mechanism_count = len(grouped)
     lower_interval_error = mechanism_alpha / mechanism_count
     upper_interval_error = violation_mechanism_alpha / mechanism_count
     validity_pvalues: dict[str, float] = {}
@@ -473,9 +538,13 @@ def audit_proxy_mechanisms(
         validated = mechanism_release_lower_count(
             frame,
             mode=mechanism_count_mode,
-            release_alpha=release_alpha,
+            release_alpha=local_release_alpha,
         )
-        individual_validated = int(frame["Validated"].sum())
+        individual_validated = mechanism_release_lower_count(
+            frame,
+            mode="holm",
+            release_alpha=local_release_alpha,
+        )
         violations = int(frame["ViolationDetected"].sum())
         # Store both collective and individually validated counts; the
         # mechanism-level decision can use either form depending on the
@@ -539,12 +608,14 @@ def audit_proxy_mechanisms(
                 "ViolationDetected": violation_rejected,
                 "Status": status,
                 "ReleaseErrorRate": release_alpha,
+                "MechanismReleaseErrorAllocation": local_release_alpha,
                 "MechanismErrorRate": mechanism_alpha,
                 "TotalErrorRate": total_alpha,
                 "ViolationReleaseErrorRate": violation_release_alpha,
                 "ViolationMechanismErrorRate": violation_mechanism_alpha,
                 "ViolationTotalErrorRate": violation_total_alpha,
                 "MechanismCountMode": mechanism_count_mode,
+                "CollectiveDependenceVerified": collective_dependence_verified,
             }
         )
 

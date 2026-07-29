@@ -41,7 +41,7 @@ def write_mechanism_calibration_table(
         "Point rule + binomial": "Point rule + binomial",
         "Per-release IUT + binomial": "Per-release IUT + binomial",
         "Two-level ProxyGuard": "Two-level \\method{}",
-        "Collective Simes release evidence": "Collective Simes \\method{}",
+        "Collective partial-conjunction release evidence": "Collective partial-conjunction \\method{}",
         "Oracle release labels": "Oracle release labels",
     }
     lines = [

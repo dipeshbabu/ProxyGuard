@@ -1,0 +1,19 @@
+{
+  "amendment_version": "1.0",
+  "dated": "2026-07-28",
+  "parent_registry": "registries/proxyguard_collective_extension_registry.json",
+  "parent_registry_sha256": "526dbac6e0409c0d0fb99138fd9094456274a272de1b9a00c8c2b2d7e8b14201",
+  "status": "Post hoc comparator added after the tail-Simes grid was inspected.",
+  "change": "Add a Fisher-tail partial-conjunction benchmark and Monte Carlo standard errors.",
+  "unchanged": [
+    "data-generating process",
+    "random seed",
+    "reliability target",
+    "risk grid",
+    "audit-size grid",
+    "release-count grid",
+    "error allocation",
+    "tail-Simes and Holm results"
+  ],
+  "interpretation": "The Fisher result is a descriptive method comparison. It is not part of the original registered confirmatory comparison."
+}

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import numpy as np
 
+from scripts.proxyguard.run_proxyguard_collective_extension import (
+    simulate_collective_setting,
+)
 from scripts.proxyguard.run_proxyguard_mechanism_study import (
     MECHANISM_METHODS,
     build_planning_table,
     holm_rejections,
     holm_release_counts,
     release_collective_simes_counts,
+    release_collective_fisher_counts,
     release_partial_conjunction_counts,
     release_validation_counts,
     run_adaptive_study,
@@ -127,14 +131,13 @@ def test_partial_conjunction_respects_partial_conjunction_formula() -> None:
         dtype=float,
     )
     # For R=4:
-    # k=1: 4*0.01 = 0.04 -> reject
-    # k=2: 2*0.02 = 0.04 -> reject
-    # k=3: 1.333*0.05 = 0.0667 -> reject
-    # k=4: 1*0.20 = 0.20 -> not reject
-    expected = np.array([[3]])
+    # k=1: min(4*0.01, 2*0.02, 4/3*0.05, 4/4*0.2) = 0.04 -> reject
+    # k=2: min(3*0.02, 3/2*0.05, 3/3*0.2) = 0.06 -> reject
+    # k=3: min(2*0.05, 2/2*0.2) = 0.10 -> not reject
+    # so the largest k is 2.
     got = release_partial_conjunction_counts(release_pvalues, release_alpha=0.07)
     assert got.shape == (1, 1)
-    assert got.tolist() == expected.tolist()
+    assert got.tolist() == [[2]]
 
 
 def test_collective_simes_count_is_not_looser_than_holm() -> None:
@@ -152,3 +155,81 @@ def test_collective_simes_count_is_not_looser_than_holm() -> None:
     partial = release_collective_simes_counts(release_pvalues, release_alpha=alpha)
     holm = holm_release_counts(release_pvalues, release_alpha=alpha)
     assert (partial >= holm).all()
+
+
+def test_collective_fisher_count_shape_and_range() -> None:
+    release_pvalues = np.array(
+        [
+            [
+                [0.001, 0.005, 0.02, 0.10],
+                [0.01, 0.02, 0.50, 0.90],
+            ]
+        ],
+        dtype=float,
+    )
+    counts = release_collective_fisher_counts(
+        release_pvalues,
+        release_alpha=0.05,
+    )
+    assert counts.shape == (1, 2)
+    assert ((counts >= 0) & (counts <= 4)).all()
+
+
+def test_partial_conjunction_collective_score_is_more_conservative_than_invalid_formula() -> None:
+    """Regression: the old R/k * p_(k) score was anti-conservative.
+
+    The synthetic construction has one effectively perfect candidate (p=0) and two
+    invalid candidates with independent Uniform p-values. The old formula rejects
+    at k=2 with probability > 0.05 in this setting.
+    """
+
+    rng = np.random.default_rng(11)
+    uniforms = rng.random((200_000, 2))
+    sorted_uniforms = np.sort(uniforms, axis=1)
+    release_pvalues = np.concatenate(
+        [np.zeros((200_000, 1)), uniforms],
+        axis=1,
+    )
+    release_pvalues = release_pvalues[:, None, :]
+    counts = release_partial_conjunction_counts(
+        release_pvalues,
+        release_alpha=0.05,
+    )
+
+    # At least two valid releases inferred (k >= 2) under the fixed threshold.
+    observed = (counts[:, 0] >= 2).mean()
+    assert observed < 0.05
+
+    old_formula_reject = (1.5 * sorted_uniforms[:, 0] <= 0.05).mean()
+    assert old_formula_reject > 0.05
+
+
+def test_collective_extension_records_count_gain_and_global_error() -> None:
+    result = simulate_collective_setting(
+        rng=np.random.default_rng(19),
+        repetitions=50,
+        mechanisms=2,
+        releases=20,
+        requirements=2,
+        audit_size=250,
+        tolerance=0.1,
+        safe_risk=0.06,
+        bad_release_risk=0.12,
+        minimum_reliability=0.8,
+        valid_reliability=0.95,
+        total_alpha=0.05,
+        release_error_share=0.5,
+    ).set_index("Method")
+
+    assert set(result.index) == {
+        "Two-level ProxyGuard",
+        "Collective partial-conjunction release evidence",
+        "Fisher-tail partial-conjunction benchmark",
+    }
+    assert (
+        result.loc[
+            "Collective partial-conjunction release evidence",
+            "MeanCollectiveCountGain",
+        ]
+        >= 0.0
+    )

@@ -1,0 +1,61 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-28",
+  "stage": "confirmation",
+  "analysis_status": "Confirmatory correlated continuous moderate-evidence shared-target comparison with both methods planned on the same pilot.",
+  "pilot_registry": "registries/proxyguard_direct_multirequirement_moderate2_pilot.json",
+  "selection_rule": "For each method, maximize mean pilot validation power over reliability 0.90 and 0.95. Break ties by choosing the smallest release-error fraction for named mode, and then the smallest target-error fraction and slack for direct mode.",
+  "direct_multirequirement_study": {
+    "seed": 9931049,
+    "repetitions": 500,
+    "mechanisms": 1,
+    "minimum_reliability": 0.8,
+    "total_alpha": 0.05,
+    "requirement_names": [
+      "relative_score",
+      "absolute_risk",
+      "decision_cost"
+    ],
+    "lower_bounds": [
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "upper_bounds": [
+      1.0,
+      1.0,
+      2.0
+    ],
+    "tolerances": [
+      0.1,
+      0.35,
+      0.8
+    ],
+    "valid_margin_low": 0.065,
+    "valid_margin_high": 0.09,
+    "margin_jitter": 0.005,
+    "invalid_margin_low": 0.001,
+    "invalid_margin_high": 0.05,
+    "noise_model": "smoothed_bernoulli",
+    "continuous_fraction": 0.02,
+    "release_counts": [
+      30,
+      100,
+      250,
+      1000
+    ],
+    "target_sizes": [
+      500,
+      1000,
+      2000
+    ],
+    "reliabilities": [
+      0.8,
+      0.9,
+      0.95
+    ],
+    "selected_named_release_error_fraction": 0.9,
+    "selected_direct_target_error_fraction": 0.9,
+    "selected_direct_normalized_slack": 0.055
+  }
+}

@@ -22,6 +22,7 @@ does not certify privacy or approve a data release.
 ```text
 proxyguard/
   core.py                 # release- and mechanism-level risk control
+  shared_target.py        # direct reliability bounds for one shared target
   attacks.py              # fixed empirical attack-suite utilities
 scripts/
   proxyguard/             # ProxyGuard studies and artifact builders
@@ -54,6 +55,9 @@ from proxyguard import (
     RiskRequirement,
     audit_proxy_candidates,
     audit_proxy_mechanisms,
+    plan_conditional_shared_target,
+    shared_target_conditional_mean_lower_bound,
+    shared_target_conditional_witness_lower_bound,
 )
 ```
 
@@ -69,6 +73,15 @@ python scripts/proxyguard/run_proxyguard_target_reuse_study.py
 python scripts/proxyguard/run_proxyguard_out_of_mechanism_study.py
 python scripts/proxyguard/run_proxyguard_mechanism_study.py
 python scripts/proxyguard/run_proxyguard_mechanism_revision_study.py
+python -m scripts.proxyguard.run_proxyguard_collective_extension
+python -m scripts.proxyguard.run_proxyguard_conditional_shared_target \
+  --registry registries/proxyguard_conditional_shared_target_confirmatory.json \
+  --output-root outputs/proxyguard_conditional_shared_target_confirmatory
+python -m scripts.proxyguard.run_proxyguard_direct_multirequirement \
+  --registry registries/proxyguard_direct_multirequirement_moderate_confirmatory.json \
+  --output-root outputs/proxyguard_direct_multirequirement_moderate_confirmatory
+python -m scripts.proxyguard.build_direct_multirequirement_assets
+python -m scripts.proxyguard.run_proxyguard_stratified_subgroup_study
 ```
 
 ## Run the real-data audits
@@ -81,16 +94,29 @@ python scripts/proxyguard/run_proxyguard_shift_audits.py
 python scripts/proxyguard/run_proxyguard_bootstrap_mechanism.py
 python scripts/proxyguard/run_proxyguard_magic_sealed_mechanism.py prepare
 python scripts/proxyguard/run_proxyguard_magic_sealed_mechanism.py audit
+python -m scripts.proxyguard.run_proxyguard_spambase_aim_mechanism prepare
+python -m scripts.proxyguard.run_proxyguard_spambase_aim_mechanism prepare-amendment
+uv run --with smartnoise-synth \
+  python -m scripts.proxyguard.run_proxyguard_spambase_aim_mechanism audit \
+  --registry registries/proxyguard_spambase_aim_audit_v2.json --jobs 4
 python scripts/proxyguard/audit_proxyguard_target_lineage.py
 ```
 
-By default, mechanism audits use Holm-certified release counts for mechanism-level
-reliability. To use the collective Simes-style release-evidence mode, pass:
+By default, mechanism audits use Holm-certified release counts. The direct
+shared-target function above provides a mechanism-only lower bound without
+certifying named releases. The planning helper reports necessary best-case
+target and release counts before an audit is opened. If both named and direct
+bounds are inspected, divide the declared error budget between them before
+target access; taking their uncorrected maximum is not valid.
+
+The Simes partial-conjunction mode is an independent-batch baseline. It must
+not be enabled merely because releases share one target. When the registered
+design supplies independent audit batches or a justified PRDS argument, pass
+both flags:
 
 ```bash
-python scripts/proxyguard/run_proxyguard_bootstrap_mechanism.py --mechanism-count-mode simes
-python scripts/proxyguard/run_proxyguard_magic_sealed_mechanism.py audit --mechanism-count-mode simes
-python scripts/proxyguard/run_proxyguard_mechanism_audit.py ... --mechanism-count-mode simes
+python scripts/proxyguard/run_proxyguard_mechanism_audit.py ... \
+  --mechanism-count-mode simes --collective-dependence-verified
 ```
 
 The MAGIC audit is a nonprivate fidelity control. Its `prepare` command

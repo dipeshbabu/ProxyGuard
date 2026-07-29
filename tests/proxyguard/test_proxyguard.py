@@ -222,7 +222,7 @@ def test_mechanism_tail_pvalues_reward_consistent_release_evidence() -> None:
 def test_mechanism_release_lower_count_modes_are_valid() -> None:
     frame = pd.DataFrame(
         {
-            "CandidatePValue": [0.001, 0.02, 0.2, 0.6],
+            "CandidatePValue": [0.002, 0.02, 0.02, 0.02],
             "Validated": [True, False, False, False],
         }
     )
@@ -238,7 +238,7 @@ def test_mechanism_release_lower_count_modes_are_valid() -> None:
     )
 
     assert holm_count == 1
-    assert simes_count == 2
+    assert simes_count == 4
     assert simes_count >= holm_count
 
 
@@ -311,6 +311,7 @@ def test_mechanism_audit_tracks_separate_directional_error_budgets() -> None:
     row = result.mechanism_summary.iloc[0]
 
     assert row["ReleaseErrorRate"] == pytest.approx(0.01)
+    assert row["MechanismReleaseErrorAllocation"] == pytest.approx(0.01)
     assert row["MechanismErrorRate"] == pytest.approx(0.03)
     assert row["ViolationReleaseErrorRate"] == pytest.approx(0.03)
     assert row["ViolationMechanismErrorRate"] == pytest.approx(0.03)
@@ -337,17 +338,32 @@ def test_mechanism_count_mode_is_recorded_and_returns_release_level_counts() -> 
         requirements=requirements,
         minimum_reliability=0.8,
         mechanism_count_mode="simes",
+        collective_dependence_verified=True,
         total_alpha=0.05,
     )
     summary = result.mechanism_summary.set_index("Mechanism")
 
     assert summary.loc["mechanism_a", "Status"] == "Mechanism validated"
     assert summary.loc["mechanism_a", "MechanismCountMode"] == "simes"
+    assert bool(summary.loc["mechanism_a", "CollectiveDependenceVerified"])
+    assert summary.loc[
+        "mechanism_a", "MechanismReleaseErrorAllocation"
+    ] == pytest.approx(0.0125)
     assert (
         int(summary.loc["mechanism_a", "IndividuallyValidatedReleases"])
         == release_count
     )
     assert summary.loc["mechanism_b", "Status"] == "Reliability violation detected"
+
+
+def test_mechanism_audit_requires_explicit_simes_dependence_assertion() -> None:
+    with pytest.raises(ValueError, match="collective_dependence_verified"):
+        audit_proxy_mechanisms(
+            {"release": {"loss": np.full(500, -0.2)}},
+            {"release": "mechanism"},
+            requirements=[RiskRequirement("loss", tolerance=0.0)],
+            mechanism_count_mode="simes",
+        )
 
 
 def test_quadratic_spending_controls_an_unbounded_sequence() -> None:

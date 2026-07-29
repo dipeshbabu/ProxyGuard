@@ -1,0 +1,34 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-28",
+  "analysis_status": "Exploratory pilot for the conditional shared-target certificate. No confirmatory claim.",
+  "conditional_shared_target_study": {
+    "seed": 7285101,
+    "repetitions": 100,
+    "release_counts": [
+      250,
+      1000
+    ],
+    "target_sizes": [
+      500,
+      1000,
+      2000
+    ],
+    "reliabilities": [
+      0.8,
+      0.9,
+      0.95
+    ],
+    "minimum_reliability": 0.8,
+    "requirements": 1,
+    "tolerance": 0.2,
+    "valid_risk_low": 0.135,
+    "valid_risk_high": 0.145,
+    "invalid_risk_low": 0.205,
+    "invalid_risk_high": 0.22,
+    "conditional_slack": 0.042,
+    "conditional_target_error_fraction": 0.9,
+    "identified_release_error_fraction": 0.5,
+    "total_alpha": 0.05
+  }
+}

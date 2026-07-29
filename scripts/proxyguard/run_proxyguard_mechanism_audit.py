@@ -38,6 +38,7 @@ def build_real_mechanism_audit(
     total_alpha: float,
     release_error_share: float,
     mechanism_count_mode: str = "holm",
+    collective_dependence_verified: bool = False,
     bound_method: str = "empirical_bernstein",
 ) -> MechanismAuditResult:
     required_columns = {
@@ -69,6 +70,7 @@ def build_real_mechanism_audit(
         total_alpha=total_alpha,
         release_error_share=release_error_share,
         mechanism_count_mode=mechanism_count_mode,
+        collective_dependence_verified=collective_dependence_verified,
         bound_method=bound_method,
     )
 
@@ -124,6 +126,14 @@ def main() -> None:
         default="holm",
         help="Aggregate release evidence by release-level Holm certification or Simes count.",
     )
+    parser.add_argument(
+        "--collective-dependence-verified",
+        action="store_true",
+        help=(
+            "Assert that Simes mode has independent audit batches or a "
+            "registered PRDS justification."
+        ),
+    )
     args = parser.parse_args()
 
     registry_path = Path(args.registry)
@@ -145,12 +155,14 @@ def main() -> None:
         losses,
         minimum_reliability=primary_reliability,
         mechanism_count_mode=args.mechanism_count_mode,
+        collective_dependence_verified=args.collective_dependence_verified,
         **common,
     )
     sensitivity = build_real_mechanism_audit(
         losses,
         minimum_reliability=sensitivity_reliability,
         mechanism_count_mode=args.mechanism_count_mode,
+        collective_dependence_verified=args.collective_dependence_verified,
         **common,
     )
     primary_summary = add_mechanism_diagnostics(
@@ -190,6 +202,7 @@ def main() -> None:
                 "primary_minimum_reliability": primary_reliability,
                 "sensitivity_minimum_reliability": sensitivity_reliability,
                 "mechanism_count_mode": args.mechanism_count_mode,
+                "collective_dependence_verified": args.collective_dependence_verified,
                 **common,
             },
             indent=2,

@@ -1,0 +1,29 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-28",
+  "analysis_status": "Frozen before the full simulation was run.",
+  "purpose": "Compare simple-random and subgroup-stratified target audits for a registered rare-group risk requirement.",
+  "subgroup_audit": {
+    "alpha": 0.05,
+    "repetitions": 5000,
+    "seed": 280726,
+    "candidates": 6,
+    "subgroup_prevalence": 0.02,
+    "risk_tolerance": 0.1,
+    "valid_subgroup_risk": 0.04,
+    "boundary_subgroup_risk": 0.1,
+    "audit_sizes": [
+      500,
+      1000,
+      2500
+    ],
+    "stratified_subgroup_sizes": [
+      250,
+      500,
+      1000
+    ],
+    "primary_error_outcome": "Familywise probability of validating at least one boundary-invalid candidate.",
+    "primary_power_outcome": "Fraction of valid candidates validated for the subgroup-specific requirement.",
+    "sampling_interpretation": "The stratified design fixes the number of labeled rare-group records. It does not count the additional screening effort needed to find those records."
+  }
+}

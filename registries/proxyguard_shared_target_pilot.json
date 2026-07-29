@@ -1,0 +1,36 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-07-28",
+  "analysis_status": "Exploratory pilot for shared-target witness and polynomial certificates. No confirmatory claim.",
+  "shared_target_study": {
+    "seed": 7282026,
+    "block_seed": 7283000,
+    "repetitions": 20,
+    "mechanisms": 3,
+    "releases": 50,
+    "requirements": 3,
+    "target_records": 5000,
+    "tolerance": 0.2,
+    "valid_risk_low": 0.01,
+    "valid_risk_high": 0.05,
+    "invalid_excess_low": 0.01,
+    "invalid_excess_high": 0.05,
+    "minimum_reliability": 0.8,
+    "power_reliabilities": [
+      0.9,
+      0.95
+    ],
+    "witness_block_size": 100,
+    "witness_slack": 0.1,
+    "witness_ramp_width": 0.02,
+    "conditional_target_error_fraction": 0.5,
+    "conditional_ramp_width": 0.0,
+    "tensor_degree": 8,
+    "tensor_margin": 0.15,
+    "tensor_coefficient_floor": 0.25,
+    "tensor_design_seed": 7284011,
+    "tensor_design_points": 500,
+    "tensor_design_reliability": 0.95,
+    "total_alpha": 0.05
+  }
+}
