@@ -37,13 +37,11 @@ dist/
 .idea/
 
 # Generated experiment outputs
-outputs/*
-!outputs/.gitkeep
+outputs/
 outputs_no_cal/
 
 # Local datasets are not pushed; keep only the placeholder
-data/*
-!data/.gitkeep
+data/
 
 # Local paper draft and generated paper assets are not pushed
 paper/
