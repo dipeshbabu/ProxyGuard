@@ -1,0 +1,37 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-03",
+  "stage": "final_pre_audit_selection_amendment",
+  "analysis_status": "The sealed target remains unopened. The capacity pilot found positive planning margins at 100 and 200 epochs. This final replicated grid resolves the moderate-evidence configuration around the already registered score slack and retains high-fidelity and degraded controls. No target, policy, reliability, or inferential setting changes.",
+  "partition_registry": "registries/proxyguard_rice_ctgan_partition.json",
+  "partition_registry_sha256": "0a24d341973d845456083b0383e3064e46b0380c1ba21e7fdc95ab08e7d706d2",
+  "development_evidence_used": [
+    "outputs/proxyguard_rice_ctgan/pilot/pilot_release_risks.csv",
+    "outputs/proxyguard_rice_ctgan/pilot_v2/pilot_release_risks.csv",
+    "outputs/proxyguard_rice_ctgan/pilot_v3/pilot_release_risks.csv",
+    "outputs/proxyguard_rice_ctgan/pilot_v4b/pilot_release_risks.csv",
+    "outputs/proxyguard_rice_ctgan/pilot_v5/pilot_release_risks.csv"
+  ],
+  "target_opened": false,
+  "replacement_generator_search": {
+    "name": "TVAE in ctgan 0.12.1",
+    "synthetic_rows": 2000,
+    "pilot_releases_per_configuration": 2,
+    "pilot_seed_base": 2026093000,
+    "configurations": [
+      {"id": "tvae_select_60", "generator_type": "TVAE", "training_rows": 500, "synthetic_rows": 2000, "embedding_dim": 64, "compress_dims": [128, 128], "decompress_dims": [128, 128], "batch_size": 500, "epochs": 60, "l2scale": 0.00001, "loss_factor": 2.0, "label_flip_probability": 0.0},
+      {"id": "tvae_select_70", "generator_type": "TVAE", "training_rows": 500, "synthetic_rows": 2000, "embedding_dim": 64, "compress_dims": [128, 128], "decompress_dims": [128, 128], "batch_size": 500, "epochs": 70, "l2scale": 0.00001, "loss_factor": 2.0, "label_flip_probability": 0.0},
+      {"id": "tvae_select_80", "generator_type": "TVAE", "training_rows": 500, "synthetic_rows": 2000, "embedding_dim": 64, "compress_dims": [128, 128], "decompress_dims": [128, 128], "batch_size": 500, "epochs": 80, "l2scale": 0.00001, "loss_factor": 2.0, "label_flip_probability": 0.0},
+      {"id": "tvae_select_90", "generator_type": "TVAE", "training_rows": 500, "synthetic_rows": 2000, "embedding_dim": 64, "compress_dims": [128, 128], "decompress_dims": [128, 128], "batch_size": 500, "epochs": 90, "l2scale": 0.00001, "loss_factor": 2.0, "label_flip_probability": 0.0},
+      {"id": "tvae_select_200", "generator_type": "TVAE", "training_rows": 500, "synthetic_rows": 2000, "embedding_dim": 64, "compress_dims": [128, 128], "decompress_dims": [128, 128], "batch_size": 500, "epochs": 200, "l2scale": 0.00001, "loss_factor": 2.0, "label_flip_probability": 0.0},
+      {"id": "tvae_select_degraded", "generator_type": "TVAE", "training_rows": 300, "synthetic_rows": 1000, "embedding_dim": 32, "compress_dims": [64, 64], "decompress_dims": [64, 64], "batch_size": 300, "epochs": 50, "l2scale": 0.00001, "loss_factor": 2.0, "label_flip_probability": 0.20}
+    ],
+    "selection_rule": {
+      "high_fidelity": "Configuration with the largest pilot 10th-percentile minimum margin.",
+      "moderate_evidence": "Positive-median-margin configuration closest to score slack plus 0.01; deterministic fallback uses the closest median margin.",
+      "degraded": "Configuration with the smallest pilot 90th-percentile minimum margin.",
+      "tie_break": "Lexicographically smaller configuration id.",
+      "target_data_used": false
+    }
+  }
+}

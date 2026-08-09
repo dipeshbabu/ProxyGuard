@@ -57,6 +57,25 @@ class SharedTargetWitnessResult:
 
 
 @dataclass(frozen=True)
+class SharedTargetBlockWitnessResult:
+    """Two-axis reliability certificate from preregistered target blocks."""
+
+    reliability_lower_bound: float
+    witness_mean_lower_bound: float
+    witness_mean: float
+    invalid_release_witness_ceiling: float
+    concentration_radius: float
+    releases: int
+    target_records: int
+    target_records_used: int
+    target_blocks: int
+    requirements: int
+    block_size: int
+    error_rate: float
+    block_seed: int
+
+
+@dataclass(frozen=True)
 class SharedTargetPolynomialResult:
     """A direct shared-target certificate from polynomial minorants."""
 
@@ -125,6 +144,34 @@ class ConditionalSharedTargetPlan:
     target_error_rate: float
 
 
+@dataclass(frozen=True)
+class CostNormalizedAuditPlan:
+    """Development-only recommendation under a two-axis audit budget."""
+
+    mode: str
+    target_records: int
+    releases: int
+    slack: float | None
+    target_error_fraction: float | None
+    release_error_share: float | None
+    projected_reliability_lower_bound: float
+    total_cost: float
+    target_cost: float
+    release_cost: float
+
+
+@dataclass(frozen=True)
+class StratifiedReleaseEvidence:
+    """Weighted risks and directional p-values from a stratified target."""
+
+    weighted_means: np.ndarray
+    validation_pvalues: np.ndarray
+    violation_pvalues: np.ndarray
+    stratum_weights: tuple[float, ...]
+    stratum_sizes: tuple[int, ...]
+    concentration_method: str
+
+
 def _as_requirement_vector(
     values: float | Sequence[float],
     requirements: int,
@@ -140,6 +187,99 @@ def _as_requirement_vector(
     if not np.isfinite(array).all():
         raise ValueError(f"{name} must contain only finite values.")
     return array
+
+
+def _validate_stratified_losses(
+    losses_by_stratum: Sequence[np.ndarray],
+) -> tuple[list[np.ndarray], int, int, np.ndarray]:
+    arrays = [np.asarray(values, dtype=float) for values in losses_by_stratum]
+    if not arrays:
+        raise ValueError("losses_by_stratum must contain at least one stratum.")
+    if any(array.ndim != 3 for array in arrays):
+        raise ValueError(
+            "Each stratum must have shape (releases, records, requirements)."
+        )
+    releases = arrays[0].shape[0]
+    requirements = arrays[0].shape[2]
+    if releases < 1 or requirements < 1:
+        raise ValueError("Release and requirement axes must be non-empty.")
+    for array in arrays:
+        if array.shape[0] != releases or array.shape[2] != requirements:
+            raise ValueError(
+                "All strata must have the same release and requirement axes."
+            )
+        if array.shape[1] < 1:
+            raise ValueError("Every stratum must contain at least one record.")
+        if not np.isfinite(array).all():
+            raise ValueError("Stratified losses must contain only finite values.")
+    sizes = np.asarray([array.shape[1] for array in arrays], dtype=int)
+    return arrays, releases, requirements, sizes
+
+
+def _validate_stratum_weights(
+    weights: Sequence[float],
+    strata: int,
+) -> np.ndarray:
+    array = np.asarray(weights, dtype=float).reshape(-1)
+    if array.size != strata:
+        raise ValueError("stratum_weights must have one entry per stratum.")
+    if not np.isfinite(array).all() or np.any(array <= 0.0):
+        raise ValueError("Stratum weights must be finite and positive.")
+    if not np.isclose(array.sum(), 1.0, rtol=0.0, atol=1e-12):
+        raise ValueError("Stratum weights must sum to one.")
+    return array
+
+
+def _stratified_tail_method(
+    weights: np.ndarray,
+    sizes: np.ndarray,
+) -> str:
+    unit_weights = weights / sizes
+    return "bernoulli_kl" if np.allclose(unit_weights, unit_weights[0]) else "hoeffding"
+
+
+def _stratified_requirement_tail_bounds(
+    observed_means: np.ndarray,
+    *,
+    reference_means: np.ndarray,
+    widths: np.ndarray,
+    weights: np.ndarray,
+    sizes: np.ndarray,
+    lower_tail: bool,
+) -> tuple[np.ndarray, str]:
+    method = _stratified_tail_method(weights, sizes)
+    if method == "bernoulli_kl":
+        total_records = int(sizes.sum())
+        observed = np.clip(observed_means / widths, 0.0, 1.0)
+        reference = np.clip(reference_means / widths, 0.0, 1.0)
+        if lower_tail:
+            active = observed < reference
+        else:
+            active = observed > reference
+        pvalues = np.ones_like(observed, dtype=float)
+        for release_index, requirement_index in np.argwhere(active):
+            pvalues[release_index, requirement_index] = np.exp(
+                -total_records
+                * _binary_kl_divergence(
+                    float(observed[release_index, requirement_index]),
+                    float(reference[requirement_index]),
+                )
+            )
+        return np.clip(pvalues, 0.0, 1.0), method
+
+    variance_proxy = np.sum((weights**2) / sizes)
+    gaps = (
+        reference_means.reshape(1, -1) - observed_means
+        if lower_tail
+        else observed_means - reference_means.reshape(1, -1)
+    )
+    pvalues = np.exp(
+        -2.0
+        * np.maximum(gaps, 0.0) ** 2
+        / (variance_proxy * widths.reshape(1, -1) ** 2)
+    )
+    pvalues[gaps <= 0.0] = 1.0
+    return np.clip(pvalues, 0.0, 1.0), method
 
 
 def _soft_step(grid: np.ndarray, threshold: float, margin: float) -> np.ndarray:
@@ -653,12 +793,12 @@ def bounded_kl_lower_bound(
     )
 
 
-def _bernoulli_kl(left: float, right: float) -> float:
-    if not 0.0 <= left <= right <= 1.0:
-        raise ValueError("Bernoulli means must satisfy 0 <= left <= right <= 1.")
+def _binary_kl_divergence(left: float, right: float) -> float:
+    if not 0.0 <= left <= 1.0 or not 0.0 <= right <= 1.0:
+        raise ValueError("Bernoulli means must lie in [0, 1].")
     if left == right:
         return 0.0
-    if right == 1.0:
+    if right == 0.0 or right == 1.0:
         return float("inf")
     first = 0.0 if left == 0.0 else left * log(left / right)
     second = (
@@ -667,6 +807,12 @@ def _bernoulli_kl(left: float, right: float) -> float:
         else (1.0 - left) * log((1.0 - left) / (1.0 - right))
     )
     return first + second
+
+
+def _bernoulli_kl(left: float, right: float) -> float:
+    if not 0.0 <= left <= right <= 1.0:
+        raise ValueError("Bernoulli means must satisfy 0 <= left <= right <= 1.")
+    return _binary_kl_divergence(left, right)
 
 
 def shared_target_polynomial_lower_bound(
@@ -1342,6 +1488,375 @@ def shared_target_witness_lower_bound(
     )
 
 
+def shared_target_block_witness_lower_bound(
+    losses: np.ndarray,
+    *,
+    tolerances: float | Sequence[float],
+    slacks: float | Sequence[float],
+    lower_bounds: float | Sequence[float] = 0.0,
+    upper_bounds: float | Sequence[float] = 1.0,
+    block_size: int = 100,
+    ramp_widths: float | Sequence[float] = 0.0,
+    error_rate: float = 0.05,
+    mechanisms: int = 1,
+    block_seed: int = 0,
+) -> SharedTargetBlockWitnessResult:
+    """Certify reliability by concentrating over releases and target blocks.
+
+    The registered target permutation is split into disjoint blocks. Every
+    release is scored on every block, giving a release-by-block array whose
+    entries may be dependent within rows and columns. The cross-average is a
+    bounded function of two independent samples: the mechanism draws and the
+    target blocks. McDiarmid's inequality therefore gives a one-sided radius
+
+    ``sqrt(0.5 * (1 / releases + 1 / blocks) * log(1 / alpha))``.
+
+    An invalid release has expected witness at most ``kappa`` by the same
+    bounded-loss Chernoff argument used by the conditional certificate. Since
+    a valid release contributes at most one,
+
+    ``E[witness] <= kappa + (1 - kappa) * reliability``.
+
+    Unlike the conditional certificate, this construction does not use a
+    Markov conversion. Its price is that the target-side Chernoff bound uses
+    the block size rather than the full target size.
+    """
+
+    array = np.asarray(losses, dtype=float)
+    if array.ndim != 3:
+        raise ValueError(
+            "losses must have shape (releases, target_records, requirements)."
+        )
+    releases, target_records, requirements = array.shape
+    if releases < 1 or target_records < 1 or requirements < 1:
+        raise ValueError(
+            "losses must have non-empty release, target, and requirement axes."
+        )
+    if not np.isfinite(array).all():
+        raise ValueError("losses must contain only finite values.")
+    if block_size < 1:
+        raise ValueError("block_size must be positive.")
+    if mechanisms < 1:
+        raise ValueError("mechanisms must be positive.")
+    if not 0.0 < error_rate < 1.0:
+        raise ValueError("error_rate must lie strictly between zero and one.")
+
+    tolerances_array = _as_requirement_vector(
+        tolerances,
+        requirements,
+        name="tolerances",
+    )
+    slacks_array = _as_requirement_vector(
+        slacks,
+        requirements,
+        name="slacks",
+    )
+    lower_array = _as_requirement_vector(
+        lower_bounds,
+        requirements,
+        name="lower_bounds",
+    )
+    upper_array = _as_requirement_vector(
+        upper_bounds,
+        requirements,
+        name="upper_bounds",
+    )
+    ramps_array = _as_requirement_vector(
+        ramp_widths,
+        requirements,
+        name="ramp_widths",
+    )
+    if np.any(lower_array >= upper_array):
+        raise ValueError("Every lower bound must be smaller than its upper bound.")
+    if np.any(slacks_array <= 0.0):
+        raise ValueError("Every slack must be positive.")
+    if np.any(ramps_array < 0.0):
+        raise ValueError("Ramp widths cannot be negative.")
+    cutoffs = tolerances_array - slacks_array
+    if (
+        np.any(cutoffs <= lower_array)
+        or np.any(cutoffs >= tolerances_array)
+        or np.any(tolerances_array >= upper_array)
+    ):
+        raise ValueError(
+            "Each requirement must satisfy lower < tolerance - slack "
+            "< tolerance < upper."
+        )
+    numerical_tolerance = 1e-12
+    if np.any(array < lower_array.reshape(1, 1, -1) - numerical_tolerance) or np.any(
+        array > upper_array.reshape(1, 1, -1) + numerical_tolerance
+    ):
+        raise ValueError("Observed losses fall outside their registered bounds.")
+
+    target_blocks = target_records // block_size
+    if target_blocks < 1:
+        raise ValueError("Not enough target records for one witness block.")
+    rng = np.random.default_rng(block_seed)
+    positions = rng.permutation(target_records)[: target_blocks * block_size]
+    blocks = positions.reshape(target_blocks, block_size)
+    block_means = array[:, blocks, :].mean(axis=2)
+
+    factors = np.empty_like(block_means)
+    for requirement_index in range(requirements):
+        ramp = ramps_array[requirement_index]
+        cutoff = cutoffs[requirement_index]
+        if ramp == 0.0:
+            factors[:, :, requirement_index] = (
+                block_means[:, :, requirement_index] <= cutoff
+            )
+        else:
+            factors[:, :, requirement_index] = np.clip(
+                (cutoff - block_means[:, :, requirement_index]) / ramp,
+                0.0,
+                1.0,
+            )
+    witness_mean = float(factors.prod(axis=2).mean())
+
+    widths = upper_array - lower_array
+    normalized_cutoffs = (cutoffs - lower_array) / widths
+    normalized_tolerances = (tolerances_array - lower_array) / widths
+    invalid_ceiling = float(
+        np.max(
+            [
+                np.exp(
+                    -block_size
+                    * _bernoulli_kl(
+                        float(normalized_cutoffs[index]),
+                        float(normalized_tolerances[index]),
+                    )
+                )
+                for index in range(requirements)
+            ]
+        )
+    )
+
+    local_error = error_rate / mechanisms
+    radius = float(
+        np.sqrt(
+            0.5
+            * (1.0 / releases + 1.0 / target_blocks)
+            * np.log(1.0 / local_error)
+        )
+    )
+    witness_mean_lower = max(0.0, witness_mean - radius)
+    if invalid_ceiling >= 1.0:
+        reliability_lower = 0.0
+    else:
+        reliability_lower = max(
+            0.0,
+            (witness_mean_lower - invalid_ceiling) / (1.0 - invalid_ceiling),
+        )
+
+    return SharedTargetBlockWitnessResult(
+        reliability_lower_bound=float(min(1.0, reliability_lower)),
+        witness_mean_lower_bound=witness_mean_lower,
+        witness_mean=witness_mean,
+        invalid_release_witness_ceiling=invalid_ceiling,
+        concentration_radius=radius,
+        releases=releases,
+        target_records=target_records,
+        target_records_used=target_blocks * block_size,
+        target_blocks=target_blocks,
+        requirements=requirements,
+        block_size=block_size,
+        error_rate=error_rate,
+        block_seed=block_seed,
+    )
+
+
+def stratified_release_evidence(
+    losses_by_stratum: Sequence[np.ndarray],
+    *,
+    stratum_weights: Sequence[float],
+    tolerances: float | Sequence[float],
+    lower_bounds: float | Sequence[float] = 0.0,
+    upper_bounds: float | Sequence[float] = 1.0,
+) -> StratifiedReleaseEvidence:
+    """Compute weighted risks and valid directional p-values by stratum.
+
+    Records must be sampled independently within each registered stratum, or
+    by simple random sampling without replacement from a fixed finite stratum.
+    The latter is no less concentrated than sampling with replacement. When
+    every record has the same analysis weight, the function uses the bounded
+    Bernoulli-KL tail bound. Otherwise it uses weighted Hoeffding.
+    """
+
+    arrays, releases, requirements, sizes = _validate_stratified_losses(
+        losses_by_stratum
+    )
+    weights = _validate_stratum_weights(stratum_weights, len(arrays))
+    tolerances_array = _as_requirement_vector(
+        tolerances,
+        requirements,
+        name="tolerances",
+    )
+    lower_array = _as_requirement_vector(
+        lower_bounds,
+        requirements,
+        name="lower_bounds",
+    )
+    upper_array = _as_requirement_vector(
+        upper_bounds,
+        requirements,
+        name="upper_bounds",
+    )
+    if np.any(lower_array >= upper_array):
+        raise ValueError("Every lower bound must be smaller than its upper bound.")
+    if np.any(tolerances_array <= lower_array) or np.any(
+        tolerances_array >= upper_array
+    ):
+        raise ValueError("Every tolerance must lie inside its loss bounds.")
+    numerical_tolerance = 1e-12
+    for array in arrays:
+        if np.any(
+            array < lower_array.reshape(1, 1, -1) - numerical_tolerance
+        ) or np.any(array > upper_array.reshape(1, 1, -1) + numerical_tolerance):
+            raise ValueError("Observed losses fall outside their registered bounds.")
+
+    stratum_means = np.stack([array.mean(axis=1) for array in arrays], axis=1)
+    weighted_means = np.einsum("g,rgj->rj", weights, stratum_means)
+    widths = upper_array - lower_array
+    shifted_means = weighted_means - lower_array.reshape(1, -1)
+    shifted_tolerances = tolerances_array - lower_array
+    validation_pvalues, method = _stratified_requirement_tail_bounds(
+        shifted_means,
+        reference_means=shifted_tolerances,
+        widths=widths,
+        weights=weights,
+        sizes=sizes,
+        lower_tail=True,
+    )
+    violation_pvalues, _ = _stratified_requirement_tail_bounds(
+        shifted_means,
+        reference_means=shifted_tolerances,
+        widths=widths,
+        weights=weights,
+        sizes=sizes,
+        lower_tail=False,
+    )
+    if validation_pvalues.shape != (releases, requirements):
+        raise RuntimeError("Unexpected stratified p-value shape.")
+    return StratifiedReleaseEvidence(
+        weighted_means=weighted_means,
+        validation_pvalues=validation_pvalues,
+        violation_pvalues=violation_pvalues,
+        stratum_weights=tuple(float(value) for value in weights),
+        stratum_sizes=tuple(int(value) for value in sizes),
+        concentration_method=method,
+    )
+
+
+def stratified_shared_target_conditional_witness_lower_bound(
+    losses_by_stratum: Sequence[np.ndarray],
+    *,
+    stratum_weights: Sequence[float],
+    tolerances: float | Sequence[float],
+    slacks: float | Sequence[float],
+    lower_bounds: float | Sequence[float] = 0.0,
+    upper_bounds: float | Sequence[float] = 1.0,
+    ramp_widths: float | Sequence[float] = 0.0,
+    error_rate: float = 0.05,
+    target_error_fraction: float = 0.5,
+    mechanisms: int = 1,
+) -> ConditionalSharedTargetResult:
+    """Direct reliability inference for a registered stratified target.
+
+    The estimand is the mixture whose stratum weights are supplied here, not
+    necessarily the population's natural prevalence. Fixed stratum sample
+    sizes are allowed. Equal per-record weights retain the Bernoulli-KL
+    ceiling used by the iid certificate; unequal weights use weighted
+    Hoeffding.
+    """
+
+    arrays, _, requirements, sizes = _validate_stratified_losses(losses_by_stratum)
+    weights = _validate_stratum_weights(stratum_weights, len(arrays))
+    tolerances_array = _as_requirement_vector(
+        tolerances,
+        requirements,
+        name="tolerances",
+    )
+    slacks_array = _as_requirement_vector(
+        slacks,
+        requirements,
+        name="slacks",
+    )
+    lower_array = _as_requirement_vector(
+        lower_bounds,
+        requirements,
+        name="lower_bounds",
+    )
+    upper_array = _as_requirement_vector(
+        upper_bounds,
+        requirements,
+        name="upper_bounds",
+    )
+    if np.any(slacks_array <= 0.0):
+        raise ValueError("Every slack must be positive.")
+    cutoffs = tolerances_array - slacks_array
+    if (
+        np.any(cutoffs <= lower_array)
+        or np.any(cutoffs >= tolerances_array)
+        or np.any(tolerances_array >= upper_array)
+    ):
+        raise ValueError(
+            "Each requirement must satisfy lower < tolerance - slack "
+            "< tolerance < upper."
+        )
+
+    evidence = stratified_release_evidence(
+        arrays,
+        stratum_weights=weights,
+        tolerances=tolerances_array,
+        lower_bounds=lower_array,
+        upper_bounds=upper_array,
+    )
+    widths = upper_array - lower_array
+    method = _stratified_tail_method(weights, sizes)
+    if method == "bernoulli_kl":
+        total_records = int(sizes.sum())
+        normalized_cutoffs = (cutoffs - lower_array) / widths
+        normalized_tolerances = (tolerances_array - lower_array) / widths
+        invalid_ceiling = float(
+            np.max(
+                [
+                    np.exp(
+                        -total_records
+                        * _bernoulli_kl(
+                            float(normalized_cutoffs[index]),
+                            float(normalized_tolerances[index]),
+                        )
+                    )
+                    for index in range(requirements)
+                ]
+            )
+        )
+    else:
+        variance_proxy = np.sum((weights**2) / sizes)
+        invalid_ceiling = float(
+            np.max(
+                np.exp(
+                    -2.0
+                    * slacks_array**2
+                    / (variance_proxy * widths**2)
+                )
+            )
+        )
+
+    return shared_target_conditional_mean_lower_bound(
+        evidence.weighted_means,
+        target_records=int(sizes.sum()),
+        tolerances=tolerances_array,
+        slacks=slacks_array,
+        lower_bounds=lower_array,
+        upper_bounds=upper_array,
+        ramp_widths=ramp_widths,
+        error_rate=error_rate,
+        target_error_fraction=target_error_fraction,
+        mechanisms=mechanisms,
+        invalid_score_ceiling=invalid_ceiling,
+    )
+
+
 def shared_target_conditional_witness_lower_bound(
     losses: np.ndarray,
     *,
@@ -1454,6 +1969,7 @@ def shared_target_conditional_mean_lower_bound(
     error_rate: float = 0.05,
     target_error_fraction: float = 0.5,
     mechanisms: int = 1,
+    invalid_score_ceiling: float | None = None,
 ) -> ConditionalSharedTargetResult:
     """Evaluate the conditional certificate from registered release means.
 
@@ -1551,20 +2067,25 @@ def shared_target_conditional_mean_lower_bound(
     normalized_tolerances = (tolerances_array - lower_array) / widths
     if np.any(normalized_tolerances > 1.0):
         raise ValueError("Every tolerance must not exceed its upper loss bound.")
-    invalid_ceiling = float(
-        np.max(
-            [
-                np.exp(
-                    -target_records
-                    * _bernoulli_kl(
-                        float(normalized_cutoffs[index]),
-                        float(normalized_tolerances[index]),
+    if invalid_score_ceiling is None:
+        invalid_ceiling = float(
+            np.max(
+                [
+                    np.exp(
+                        -target_records
+                        * _bernoulli_kl(
+                            float(normalized_cutoffs[index]),
+                            float(normalized_tolerances[index]),
+                        )
                     )
-                )
-                for index in range(requirements)
-            ]
+                    for index in range(requirements)
+                ]
+            )
         )
-    )
+    else:
+        invalid_ceiling = float(invalid_score_ceiling)
+        if not np.isfinite(invalid_ceiling) or not 0.0 <= invalid_ceiling <= 1.0:
+            raise ValueError("invalid_score_ceiling must lie in [0, 1].")
 
     target_error_rate = error_rate * target_error_fraction / mechanisms
     release_error_rate = (
@@ -1758,6 +2279,237 @@ def witness_reliability_lower_from_mean(
         witness_mean_lower,
         effective_sample_size,
     )
+
+
+def recommend_cost_normalized_audit(
+    *,
+    total_budget: float,
+    target_record_cost: float,
+    release_cost: float,
+    candidate_target_records: Sequence[int],
+    candidate_releases: Sequence[int],
+    tolerances: float | Sequence[float],
+    candidate_slacks: Sequence[float],
+    expected_direct_score_probability: float,
+    expected_named_recognition_probability: float,
+    error_rate: float = 0.05,
+    mechanisms: int = 1,
+    target_error_fractions: Sequence[float] = (0.5, 0.8),
+    named_release_error_shares: Sequence[float] = (0.5, 0.9),
+) -> CostNormalizedAuditPlan:
+    """Choose a mode and sample sizes using development-only power inputs.
+
+    The two expected probabilities must be estimated without target access.
+    The direct calculation uses the exact registered contamination formula and
+    a Clopper--Pearson lower bound at the anticipated score count. The named
+    calculation applies Clopper--Pearson to the anticipated number of
+    individually recognized releases. It is a planning score, not a coverage
+    statement about pilot estimates.
+    """
+
+    scalar_values = np.asarray(
+        [
+            total_budget,
+            target_record_cost,
+            release_cost,
+            error_rate,
+            expected_direct_score_probability,
+            expected_named_recognition_probability,
+        ],
+        dtype=float,
+    )
+    if not np.isfinite(scalar_values).all():
+        raise ValueError("Planner inputs must be finite.")
+    if total_budget <= 0.0 or target_record_cost <= 0.0 or release_cost <= 0.0:
+        raise ValueError("Budget and unit costs must be positive.")
+    if not 0.0 < error_rate < 1.0:
+        raise ValueError("error_rate must lie strictly between zero and one.")
+    if not 0.0 <= expected_direct_score_probability <= 1.0:
+        raise ValueError("expected_direct_score_probability must lie in [0, 1].")
+    if not 0.0 <= expected_named_recognition_probability <= 1.0:
+        raise ValueError("expected_named_recognition_probability must lie in [0, 1].")
+    if mechanisms < 1:
+        raise ValueError("mechanisms must be positive.")
+
+    tolerances_array = np.asarray(tolerances, dtype=float).reshape(-1)
+    if tolerances_array.size < 1:
+        raise ValueError("tolerances must contain at least one requirement.")
+    if np.any(tolerances_array <= 0.0) or np.any(tolerances_array >= 1.0):
+        raise ValueError("The current planner expects tolerances inside (0, 1).")
+    targets = sorted({int(value) for value in candidate_target_records})
+    releases_grid = sorted({int(value) for value in candidate_releases})
+    if not targets or not releases_grid or min(targets) < 1 or min(releases_grid) < 1:
+        raise ValueError("Candidate target and release counts must be positive.")
+    slacks = sorted({float(value) for value in candidate_slacks})
+    if not slacks or min(slacks) <= 0.0:
+        raise ValueError("Candidate slacks must be positive.")
+
+    candidates: list[CostNormalizedAuditPlan] = []
+    for target_records in targets:
+        for releases in releases_grid:
+            target_cost = target_record_cost * target_records
+            mechanism_cost = release_cost * releases
+            total_cost = target_cost + mechanism_cost
+            if total_cost > total_budget + 1e-12:
+                continue
+
+            named_successes = int(
+                np.floor(releases * expected_named_recognition_probability)
+            )
+            for share in named_release_error_shares:
+                share = float(share)
+                if not 0.0 < share < 1.0:
+                    raise ValueError("Named release-error shares must lie in (0, 1).")
+                outer_error = error_rate * (1.0 - share) / mechanisms
+                named_lower = (
+                    0.0
+                    if named_successes == 0
+                    else float(
+                        beta.ppf(
+                            outer_error,
+                            named_successes,
+                            releases - named_successes + 1,
+                        )
+                    )
+                )
+                candidates.append(
+                    CostNormalizedAuditPlan(
+                        mode="named",
+                        target_records=target_records,
+                        releases=releases,
+                        slack=None,
+                        target_error_fraction=None,
+                        release_error_share=share,
+                        projected_reliability_lower_bound=named_lower,
+                        total_cost=total_cost,
+                        target_cost=target_cost,
+                        release_cost=mechanism_cost,
+                    )
+                )
+
+            direct_successes = int(
+                np.floor(releases * expected_direct_score_probability)
+            )
+            for fraction in target_error_fractions:
+                fraction = float(fraction)
+                if not 0.0 < fraction < 1.0:
+                    raise ValueError("Target-error fractions must lie in (0, 1).")
+                target_error = error_rate * fraction / mechanisms
+                release_error = error_rate * (1.0 - fraction) / mechanisms
+                score_lower = (
+                    0.0
+                    if direct_successes == 0
+                    else float(
+                        beta.ppf(
+                            release_error,
+                            direct_successes,
+                            releases - direct_successes + 1,
+                        )
+                    )
+                )
+                for slack in slacks:
+                    if np.any(tolerances_array - slack <= 0.0):
+                        continue
+                    invalid_ceiling = max(
+                        np.exp(
+                            -target_records
+                            * _bernoulli_kl(
+                                float(tolerance - slack),
+                                float(tolerance),
+                            )
+                        )
+                        for tolerance in tolerances_array
+                    )
+                    direct_lower = max(
+                        0.0,
+                        score_lower - min(1.0, invalid_ceiling / target_error),
+                    )
+                    candidates.append(
+                        CostNormalizedAuditPlan(
+                            mode="direct",
+                            target_records=target_records,
+                            releases=releases,
+                            slack=slack,
+                            target_error_fraction=fraction,
+                            release_error_share=None,
+                            projected_reliability_lower_bound=direct_lower,
+                            total_cost=total_cost,
+                            target_cost=target_cost,
+                            release_cost=mechanism_cost,
+                        )
+                    )
+
+    if not candidates:
+        raise ValueError("No candidate design fits the declared budget.")
+    return max(
+        candidates,
+        key=lambda plan: (
+            plan.projected_reliability_lower_bound,
+            -plan.total_cost,
+            plan.target_records,
+            plan.releases,
+            plan.mode == "direct",
+        ),
+    )
+
+
+def project_cost_normalized_plan(
+    plan: CostNormalizedAuditPlan,
+    *,
+    tolerances: float | Sequence[float],
+    direct_score_probability: float,
+    named_recognition_probability: float,
+    error_rate: float = 0.05,
+    mechanisms: int = 1,
+) -> float:
+    """Evaluate a frozen cost-normalized plan at declared success rates.
+
+    This is a development-planning calculation, not a confidence statement.
+    It is useful for sensitivity analysis after a plan has been chosen from
+    imperfect pilot estimates.
+    """
+
+    probabilities = np.asarray(
+        [direct_score_probability, named_recognition_probability], dtype=float
+    )
+    if not np.isfinite(probabilities).all() or np.any(probabilities < 0.0) or np.any(
+        probabilities > 1.0
+    ):
+        raise ValueError("Planning probabilities must lie in [0, 1].")
+    if not 0.0 < error_rate < 1.0 or mechanisms < 1:
+        raise ValueError("error_rate and mechanisms are invalid.")
+
+    releases = int(plan.releases)
+    if plan.mode == "named":
+        if plan.release_error_share is None:
+            raise ValueError("A named plan must record its release-error share.")
+        successes = int(np.floor(releases * named_recognition_probability))
+        if successes == 0:
+            return 0.0
+        outer_error = error_rate * (1.0 - plan.release_error_share) / mechanisms
+        return float(beta.ppf(outer_error, successes, releases - successes + 1))
+
+    if plan.mode != "direct":
+        raise ValueError(f"Unknown cost-normalized plan mode: {plan.mode}.")
+    if plan.slack is None or plan.target_error_fraction is None:
+        raise ValueError("A direct plan must record its slack and target-error fraction.")
+    tolerances_array = np.asarray(tolerances, dtype=float).reshape(-1)
+    if tolerances_array.size < 1 or np.any(tolerances_array - plan.slack <= 0.0):
+        raise ValueError("Direct-plan tolerances must exceed the registered slack.")
+    successes = int(np.floor(releases * direct_score_probability))
+    if successes == 0:
+        return 0.0
+    release_error = error_rate * (1.0 - plan.target_error_fraction) / mechanisms
+    target_error = error_rate * plan.target_error_fraction / mechanisms
+    score_lower = float(beta.ppf(release_error, successes, releases - successes + 1))
+    invalid_ceiling = max(
+        np.exp(
+            -plan.target_records
+            * _bernoulli_kl(float(tolerance - plan.slack), float(tolerance))
+        )
+        for tolerance in tolerances_array
+    )
+    return float(max(0.0, score_lower - min(1.0, invalid_ceiling / target_error)))
 
 
 def hybrid_reliability_lower_bound(

@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from risk_models.cv_runner import _build_audit_records
 from proxyguard.core import (
     RiskRequirement,
     audit_adaptive_candidate_stream,
@@ -171,27 +170,6 @@ def test_requirement_bounds_apply_to_paired_regret_not_component_loss() -> None:
             regrets,
             [RiskRequirement("loss", tolerance=0.5, lower=0.0, upper=1.0)],
         )
-
-
-def test_audit_record_export_includes_thresholds_and_groups() -> None:
-    artifacts = [
-        {
-            "Model": "m",
-            "split_seed": 7,
-            "test_index": pd.Index([10, 11]),
-            "y_test": pd.Series([0, 1], index=[10, 11]),
-            "p_test": np.array([0.2, 0.8]),
-            "threshold": 0.4,
-            "cost_thresholds": {5.0: 0.3},
-        }
-    ]
-    subgroups = pd.DataFrame({"sex": ["F", "M"]}, index=[10, 11])
-
-    records = _build_audit_records("d", artifacts, subgroups)
-
-    assert records["record_id"].tolist() == ["10", "11"]
-    assert records["cost_threshold_5x"].tolist() == [0.3, 0.3]
-    assert records["subgroup__sex"].tolist() == ["F", "M"]
 
 
 def test_exact_binomial_bounds_handle_endpoints_and_tighten_with_successes() -> None:

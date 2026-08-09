@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from risk_models.eval import (  # noqa: E402
+from scripts.proxyguard.tabular.metrics import (  # noqa: E402
     apply_calibrator,
     best_cost_threshold_from_val,
     fit_calibrator,

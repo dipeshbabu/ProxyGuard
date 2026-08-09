@@ -13,8 +13,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from risk_models.configs import get_dataset_config  # noqa: E402
-from risk_models.dataset import load_dataset  # noqa: E402
+from scripts.proxyguard.tabular.config import get_dataset_config  # noqa: E402
+from scripts.proxyguard.tabular.data import load_dataset  # noqa: E402
 from proxyguard.core import (  # noqa: E402
     RiskRequirement,
     audit_proxy_mechanisms,

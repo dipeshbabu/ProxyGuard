@@ -1,0 +1,20 @@
+{
+  "amendment_version": "1.0",
+  "frozen_on": "2026-08-02",
+  "parent_registry": "registries/proxyguard_secondary_mushroom_partition.json",
+  "parent_registry_sha256": "03b5a2e67062a8edf5bd6c69b39776e5244a95100810c5c9f90f5df17a04ce02",
+  "trigger": "The first development-only pilot attempt stopped before generator fitting because cap-surface contained a label omitted from the official metadata domain.",
+  "sealed_audit_opened": false,
+  "change": {
+    "unknown_category_policy": "map_to_registered_unknown",
+    "description": "Map blanks and every categorical label outside the official registered domain to the already registered '?' category. Apply the same fixed map to development, synthetic, and audit records."
+  },
+  "unchanged": [
+    "row partition",
+    "release and generator seeds",
+    "privacy configuration",
+    "requirements and slacks",
+    "error allocations",
+    "decision rules"
+  ]
+}

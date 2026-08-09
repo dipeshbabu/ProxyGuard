@@ -1,0 +1,31 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-03",
+  "stage": "pre_audit_compute_amendment",
+  "analysis_status": "The first development-only pilot showed that one CTGAN epoch was an underfit compute check: every configuration had negative planning margin. The sealed target remained unopened. This amendment replaces that grid with longer standard CTGAN fits and reduces pilot replication to one fit per configuration before the audit registry is frozen.",
+  "partition_registry": "registries/proxyguard_rice_ctgan_partition.json",
+  "partition_registry_sha256": "0a24d341973d845456083b0383e3064e46b0380c1ba21e7fdc95ab08e7d706d2",
+  "development_evidence_used": "outputs/proxyguard_rice_ctgan/pilot/pilot_release_risks.csv",
+  "target_opened": false,
+  "replacement_generator_search": {
+    "name": "CTGAN 0.12.1",
+    "synthetic_rows": 500,
+    "pilot_releases_per_configuration": 1,
+    "pilot_seed_base": 2026085000,
+    "configurations": [
+      {"id": "ctgan_v2_01", "training_rows": 500, "embedding_dim": 8, "generator_dim": [8], "discriminator_dim": [8], "batch_size": 500, "epochs": 5, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_v2_02", "training_rows": 500, "embedding_dim": 8, "generator_dim": [8], "discriminator_dim": [8], "batch_size": 500, "epochs": 10, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_v2_03", "training_rows": 500, "embedding_dim": 8, "generator_dim": [8], "discriminator_dim": [8], "batch_size": 500, "epochs": 20, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_v2_04", "training_rows": 300, "embedding_dim": 8, "generator_dim": [8], "discriminator_dim": [8], "batch_size": 300, "epochs": 10, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_v2_05", "training_rows": 300, "embedding_dim": 8, "generator_dim": [8], "discriminator_dim": [8], "batch_size": 300, "epochs": 10, "pac": 10, "label_flip_probability": 0.10},
+      {"id": "ctgan_v2_06", "training_rows": 200, "embedding_dim": 4, "generator_dim": [4], "discriminator_dim": [4], "batch_size": 200, "epochs": 5, "pac": 10, "label_flip_probability": 0.30}
+    ],
+    "selection_rule": {
+      "high_fidelity": "Configuration with the largest pilot 10th-percentile minimum margin.",
+      "moderate_evidence": "Positive-median-margin configuration closest to score slack plus 0.01; deterministic fallback uses the closest median margin.",
+      "degraded": "Configuration with the smallest pilot 90th-percentile minimum margin.",
+      "tie_break": "Lexicographically smaller configuration id.",
+      "target_data_used": false
+    }
+  }
+}

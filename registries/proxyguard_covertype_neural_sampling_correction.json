@@ -1,0 +1,13 @@
+{
+  "registry_version": "1.0",
+  "issued_on": "2026-08-03",
+  "analysis_status": "Post-audit sampling-validity correction adopted after review identified that fixed class counts do not satisfy an iid-mixture assumption. No limits, slacks, seeds, mechanism settings, or reliability targets changed.",
+  "audit_registry": "registries/proxyguard_covertype_neural_audit.json",
+  "audit_registry_sha256": "d27a859247b54db90b2b8eaf2158a7ab170a35c5f86ccb4a3e14bcaa94eb1b6d",
+  "target_estimand": "The equally weighted mixture of the empirical target-population conditionals given Y=0 and Y=1.",
+  "sampling_design": "Independent simple random samples without replacement within the two outcome strata, with fixed equal stratum sizes.",
+  "stratum_labels": [0, 1],
+  "stratum_weights": [0.5, 0.5],
+  "concentration_rule": "Bounded Bernoulli-KL when all records have equal analysis weight; weighted Hoeffding otherwise.",
+  "confirmatory_status": "Corrective reanalysis, not a preregistered analysis amendment."
+}

@@ -1,0 +1,85 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-03",
+  "stage": "partition_and_development_plan",
+  "analysis_status": "Prospective project-new CTGAN audit. No Rice target record or target outcome has been used in this project.",
+  "dataset": {
+    "name": "Rice (Cammeo and Osmancik)",
+    "uci_id": 545,
+    "doi": "10.24432/C5MW4Z",
+    "repository_url": "https://archive.ics.uci.edu/dataset/545/rice+cammeo+and+osmancik",
+    "data_url": "https://archive.ics.uci.edu/static/public/545/data.csv",
+    "expected_records": 3810,
+    "target": "Class",
+    "positive_label": "Cammeo",
+    "class_labels": ["Cammeo", "Osmancik"],
+    "id_column": null,
+    "binary_task": "Distinguish Cammeo from Osmancik rice grains using seven measured shape features."
+  },
+  "partition": {
+    "seed": 2026080301,
+    "source_records": 500,
+    "planning_records": 1000,
+    "target_records": 2000,
+    "sampling_design": "Uniform record-disjoint source, planning, and sealed-population partition. The audit records are sampled iid with replacement from the sealed empirical population.",
+    "artifact_root": "outputs/proxyguard_rice_ctgan",
+    "raw_path": "outputs/proxyguard_rice_ctgan/raw/data.csv",
+    "source_path": "outputs/proxyguard_rice_ctgan/sealed/source.csv",
+    "planning_path": "outputs/proxyguard_rice_ctgan/sealed/planning.csv",
+    "target_population_path": "outputs/proxyguard_rice_ctgan/sealed/target_population.csv",
+    "target_path": "outputs/proxyguard_rice_ctgan/sealed/target_audit.csv",
+    "manifest_path": "outputs/proxyguard_rice_ctgan/sealed/partition_manifest.json"
+  },
+  "source_procedure": {
+    "model": "standardized logistic regression",
+    "regularization_c": 1.0,
+    "maximum_iterations": 500,
+    "decision_threshold": 0.5,
+    "cost_false_negative": 5.0,
+    "cost_false_positive": 1.0,
+    "cost_threshold": 0.16666666666666666
+  },
+  "generator_search": {
+    "name": "CTGAN 0.12.1",
+    "synthetic_rows": 500,
+    "pilot_releases_per_configuration": 2,
+    "pilot_seed_base": 2026083000,
+    "configurations": [
+      {"id": "ctgan_01", "training_rows": 500, "embedding_dim": 8, "generator_dim": [8], "discriminator_dim": [8], "batch_size": 500, "epochs": 1, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_02", "training_rows": 400, "embedding_dim": 8, "generator_dim": [8], "discriminator_dim": [8], "batch_size": 400, "epochs": 1, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_03", "training_rows": 300, "embedding_dim": 8, "generator_dim": [8], "discriminator_dim": [8], "batch_size": 300, "epochs": 1, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_04", "training_rows": 250, "embedding_dim": 4, "generator_dim": [4], "discriminator_dim": [4], "batch_size": 250, "epochs": 1, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_05", "training_rows": 200, "embedding_dim": 4, "generator_dim": [4], "discriminator_dim": [4], "batch_size": 200, "epochs": 1, "pac": 10, "label_flip_probability": 0.0},
+      {"id": "ctgan_06", "training_rows": 200, "embedding_dim": 4, "generator_dim": [4], "discriminator_dim": [4], "batch_size": 200, "epochs": 1, "pac": 10, "label_flip_probability": 0.05},
+      {"id": "ctgan_07", "training_rows": 200, "embedding_dim": 4, "generator_dim": [4], "discriminator_dim": [4], "batch_size": 200, "epochs": 1, "pac": 10, "label_flip_probability": 0.15},
+      {"id": "ctgan_08", "training_rows": 150, "embedding_dim": 4, "generator_dim": [4], "discriminator_dim": [4], "batch_size": 150, "epochs": 1, "pac": 10, "label_flip_probability": 0.30},
+      {"id": "ctgan_09", "training_rows": 100, "embedding_dim": 4, "generator_dim": [4], "discriminator_dim": [4], "batch_size": 100, "epochs": 1, "pac": 10, "label_flip_probability": 0.45}
+    ],
+    "selection_rule": {
+      "high_fidelity": "Configuration with the largest pilot 10th-percentile minimum margin.",
+      "moderate_evidence": "Positive-median-margin configuration closest to score slack plus 0.01; deterministic fallback uses the closest median margin.",
+      "degraded": "Configuration with the smallest pilot 90th-percentile minimum margin.",
+      "tie_break": "Lexicographically smaller configuration id.",
+      "target_data_used": false
+    }
+  },
+  "claims": {
+    "target_population": "Uniform empirical distribution over the sealed record-disjoint Rice reserve.",
+    "minimum_reliability": 0.75,
+    "reliability_interpretation": "At least three in four independent full-pipeline CTGAN releases meet every primary requirement.",
+    "total_alpha": 0.05,
+    "named_release_error_share": 0.9,
+    "direct_target_error_fraction": 0.8,
+    "score_slack": 0.035,
+    "registered_configurations": 3,
+    "primary_policy": {
+      "normalized_degradation_budget": 0.08,
+      "interpretation": "The proxy may add at most eight percentage points to each normalized planning loss, subject to an absolute ceiling.",
+      "absolute_ceilings": {"classification_error": 0.25, "brier": 0.20, "normalized_cost5x": 0.18}
+    },
+    "audit_releases": {"high_fidelity": 40, "moderate_evidence": 120, "degraded": 40},
+    "release_seed_bases": {"high_fidelity": 2026090000, "moderate_evidence": 2026100000, "degraded": 2026110000},
+    "headline_rule": "All three configurations are one registered family. The primary limits and reliability target alone determine the headline conclusions; target outcomes cannot change the selected configurations or analysis.",
+    "desired_but_not_assumed_pattern": "High fidelity validates under both modes; moderate evidence may validate only under direct mode; degraded is unresolved or violates a requirement. Every outcome is reported."
+  }
+}

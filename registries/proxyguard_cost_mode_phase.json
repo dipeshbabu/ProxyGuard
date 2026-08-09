@@ -1,0 +1,22 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-03",
+  "analysis_status": "Confirmatory development-only cost phase comparison for moderate and high-signal evidence regimes.",
+  "cost_planning": {
+    "total_budget": 10000.0,
+    "target_record_cost": 1.0,
+    "release_to_target_cost_ratios": [0.01, 0.1, 1.0, 10.0, 100.0],
+    "candidate_target_records": [250, 500, 1000, 2000, 5000],
+    "candidate_releases": [30, 100, 250, 500, 1000],
+    "tolerances": [0.3],
+    "candidate_slacks": [0.03, 0.04, 0.05, 0.06],
+    "scenarios": [
+      {"name": "moderate", "direct_score_probability": 0.95, "named_recognition_probability": 0.80},
+      {"name": "high_signal", "direct_score_probability": 0.95, "named_recognition_probability": 0.98}
+    ],
+    "error_rate": 0.05,
+    "mechanisms": 1,
+    "target_error_fractions": [0.5, 0.8, 0.9],
+    "named_release_error_shares": [0.5, 0.8, 0.9]
+  }
+}

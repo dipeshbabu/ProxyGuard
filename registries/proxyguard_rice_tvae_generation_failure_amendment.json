@@ -1,0 +1,21 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-03",
+  "stage": "pre_target_generation_failure_policy",
+  "analysis_status": "The first frozen release-generation run stopped when a TVAE draw produced a single-class synthetic table. No target record or target outcome had been opened. This amendment retains every frozen release seed and treats an untrainable release as failing every registered bounded-loss requirement.",
+  "audit_registry": "registries/proxyguard_rice_tvae_audit.json",
+  "audit_registry_sha256": "6fd515459042a3a2271070047258b502bc27bf8776db0e1ba5e808f2a1c14c80",
+  "failed_release_policy": "assign_unit_loss",
+  "unit_loss_interpretation": "Classification error, Brier loss, and normalized 5-to-1 decision cost are each assigned their registered upper bound one. The failed seed remains in both the named and direct mechanism denominators.",
+  "target_opened": false,
+  "unchanged": [
+    "target reserve",
+    "source and planning partitions",
+    "selected configurations",
+    "release seeds",
+    "risk limits",
+    "score slacks",
+    "minimum reliability",
+    "error allocations"
+  ]
+}

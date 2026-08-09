@@ -12,15 +12,139 @@ from proxyguard.shared_target import (
     bounded_kl_lower_bound,
     hybrid_reliability_lower_bound,
     plan_conditional_shared_target,
+    project_cost_normalized_plan,
+    recommend_cost_normalized_audit,
+    shared_target_block_witness_lower_bound,
     shared_target_conditional_mean_lower_bound,
     shared_target_conditional_witness_lower_bound,
     shared_target_polynomial_lower_bound,
     shared_target_reliability_lower_bound,
     shared_target_tensor_polynomial_lower_bound,
     shared_target_witness_lower_bound,
+    stratified_release_evidence,
+    stratified_shared_target_conditional_witness_lower_bound,
     tensor_bernstein_design_minorant,
     tensor_bernstein_validity_minorant,
 )
+
+
+def test_block_witness_uses_two_axis_mcdiarmid_radius() -> None:
+    losses = np.zeros((200, 5_000, 1), dtype=float)
+    result = shared_target_block_witness_lower_bound(
+        losses,
+        tolerances=[0.5],
+        slacks=[0.2],
+        block_size=50,
+        error_rate=0.05,
+        block_seed=19,
+    )
+
+    expected_radius = np.sqrt(
+        0.5 * (1.0 / 200 + 1.0 / 100) * np.log(1.0 / 0.05)
+    )
+    assert result.target_blocks == 100
+    assert result.witness_mean == pytest.approx(1.0)
+    assert result.concentration_radius == pytest.approx(expected_radius)
+    assert result.witness_mean_lower_bound == pytest.approx(1.0 - expected_radius)
+    assert result.reliability_lower_bound > 0.8
+
+
+def test_block_witness_is_vacuous_when_invalid_ceiling_is_one() -> None:
+    losses = np.zeros((20, 20, 1), dtype=float)
+    result = shared_target_block_witness_lower_bound(
+        losses,
+        tolerances=[0.5],
+        slacks=[1e-12],
+        block_size=1,
+        error_rate=0.05,
+    )
+
+    assert result.invalid_release_witness_ceiling == pytest.approx(1.0)
+    assert result.reliability_lower_bound == 0.0
+
+
+def test_cost_normalized_planner_selects_feasible_design() -> None:
+    plan = recommend_cost_normalized_audit(
+        total_budget=6_000.0,
+        target_record_cost=5.0,
+        release_cost=1.0,
+        candidate_target_records=[500, 1_000],
+        candidate_releases=[100, 500],
+        tolerances=[0.3],
+        candidate_slacks=[0.04, 0.06],
+        expected_direct_score_probability=0.97,
+        expected_named_recognition_probability=0.60,
+        target_error_fractions=[0.8],
+        named_release_error_shares=[0.9],
+    )
+
+    assert plan.total_cost <= 6_000.0
+    assert plan.mode == "direct"
+    assert plan.target_records == 1_000
+    assert plan.releases == 500
+    assert plan.projected_reliability_lower_bound > 0.8
+
+
+def test_cost_plan_projection_detects_pilot_misspecification() -> None:
+    plan = recommend_cost_normalized_audit(
+        total_budget=6_000.0,
+        target_record_cost=5.0,
+        release_cost=1.0,
+        candidate_target_records=[500, 1_000],
+        candidate_releases=[100, 500],
+        tolerances=[0.3],
+        candidate_slacks=[0.04, 0.06],
+        expected_direct_score_probability=0.97,
+        expected_named_recognition_probability=0.60,
+        target_error_fractions=[0.8],
+        named_release_error_shares=[0.9],
+    )
+    realized = project_cost_normalized_plan(
+        plan,
+        tolerances=[0.3],
+        direct_score_probability=0.87,
+        named_recognition_probability=0.60,
+    )
+
+    assert plan.mode == "direct"
+    assert realized < plan.projected_reliability_lower_bound
+    assert 0.0 <= realized <= 1.0
+
+
+def test_equal_weight_strata_retain_bernoulli_kl_ceiling() -> None:
+    first = np.zeros((100, 400, 1), dtype=float)
+    second = np.zeros((100, 400, 1), dtype=float)
+    result = stratified_shared_target_conditional_witness_lower_bound(
+        [first, second],
+        stratum_weights=[0.5, 0.5],
+        tolerances=[0.4],
+        slacks=[0.1],
+        error_rate=0.05,
+        target_error_fraction=0.8,
+    )
+    expected = np.exp(-800 * (0.3 * np.log(0.3 / 0.4) + 0.7 * np.log(0.7 / 0.6)))
+
+    assert result.target_records == 800
+    assert result.invalid_release_score_ceiling == pytest.approx(expected)
+    assert result.reliability_lower_bound > 0.8
+
+
+def test_unequal_stratum_weights_use_weighted_hoeffding() -> None:
+    first = np.full((4, 100, 1), 0.1, dtype=float)
+    second = np.full((4, 50, 1), 0.3, dtype=float)
+    evidence = stratified_release_evidence(
+        [first, second],
+        stratum_weights=[0.8, 0.2],
+        tolerances=[0.25],
+    )
+    weighted_mean = 0.8 * 0.1 + 0.2 * 0.3
+    variance_proxy = 0.8**2 / 100 + 0.2**2 / 50
+    expected_pvalue = np.exp(-2.0 * (0.25 - weighted_mean) ** 2 / variance_proxy)
+
+    assert evidence.concentration_method == "hoeffding"
+    assert evidence.weighted_means[:, 0] == pytest.approx(weighted_mean)
+    assert evidence.validation_pvalues[:, 0] == pytest.approx(expected_pvalue)
+    assert evidence.violation_pvalues[:, 0] == pytest.approx(1.0)
 
 
 def test_bernstein_restriction_matches_original_polynomial() -> None:

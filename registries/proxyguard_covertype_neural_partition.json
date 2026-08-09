@@ -1,0 +1,95 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-02",
+  "stage": "partition_and_development_plan",
+  "analysis_status": "Prospective project-new full-pipeline neural-generator audit. The Covertype target reserve has not been used for development or configuration selection.",
+  "dataset": {
+    "name": "Covertype",
+    "uci_id": 31,
+    "doi": "10.24432/C50K5N",
+    "repository_url": "https://archive.ics.uci.edu/dataset/31/covertype",
+    "data_url": "https://archive.ics.uci.edu/static/public/31/data.csv",
+    "expected_records": 581012,
+    "target": "Cover_Type",
+    "positive_label": 2,
+    "id_column": null,
+    "binary_task": "Distinguish lodgepole pine (cover type 2) from the other registered forest cover types."
+  },
+  "partition": {
+    "seed": 2026080202,
+    "source_rows_per_class": 5000,
+    "planning_rows_per_class": 5000,
+    "sealed_target_rows_per_class": 1000,
+    "sampling_design": "Disjoint equal-allocation stratified samples for cover type 2 versus all other cover types. The estimand is the balanced target population induced by this design.",
+    "artifact_root": "outputs/proxyguard_covertype_neural_direct",
+    "raw_path": "outputs/proxyguard_covertype_neural_direct/raw/data.csv",
+    "source_path": "outputs/proxyguard_covertype_neural_direct/sealed/source.csv",
+    "planning_path": "outputs/proxyguard_covertype_neural_direct/sealed/planning.csv",
+    "target_path": "outputs/proxyguard_covertype_neural_direct/sealed/target.csv",
+    "manifest_path": "outputs/proxyguard_covertype_neural_direct/sealed/partition_manifest.json"
+  },
+  "source_procedure": {
+    "model": "standardized logistic regression",
+    "regularization_c": 1.0,
+    "maximum_iterations": 500,
+    "decision_threshold": 0.5,
+    "cost_false_negative": 5.0,
+    "cost_false_positive": 1.0,
+    "cost_threshold": 0.16666666666666666
+  },
+  "generator_search": {
+    "name": "random-feature denoising autoencoder",
+    "description": "Each mechanism draw independently samples the hidden layer, fits the reconstruction map on the fixed source table, samples a synthetic release, and refits the proxy classifier.",
+    "synthetic_rows": 10000,
+    "pilot_releases_per_configuration": 12,
+    "pilot_seed_base": 2026082000,
+    "configurations": [
+      {"id": "rfdae_01", "hidden_units": 48, "train_noise": 0.01, "sample_noise": 0.01, "label_fidelity": 1.0, "ridge": 0.001},
+      {"id": "rfdae_02", "hidden_units": 48, "train_noise": 0.03, "sample_noise": 0.03, "label_fidelity": 0.95, "ridge": 0.003},
+      {"id": "rfdae_03", "hidden_units": 32, "train_noise": 0.05, "sample_noise": 0.05, "label_fidelity": 0.9, "ridge": 0.01},
+      {"id": "rfdae_04", "hidden_units": 24, "train_noise": 0.08, "sample_noise": 0.08, "label_fidelity": 0.85, "ridge": 0.02},
+      {"id": "rfdae_05", "hidden_units": 20, "train_noise": 0.1, "sample_noise": 0.1, "label_fidelity": 0.8, "ridge": 0.03},
+      {"id": "rfdae_06", "hidden_units": 16, "train_noise": 0.15, "sample_noise": 0.15, "label_fidelity": 0.7, "ridge": 0.05},
+      {"id": "rfdae_07", "hidden_units": 12, "train_noise": 0.2, "sample_noise": 0.2, "label_fidelity": 0.6, "ridge": 0.1},
+      {"id": "rfdae_08", "hidden_units": 8, "train_noise": 0.25, "sample_noise": 0.25, "label_fidelity": 0.5, "ridge": 0.15},
+      {"id": "rfdae_09", "hidden_units": 4, "train_noise": 0.35, "sample_noise": 0.35, "label_fidelity": 0.3, "ridge": 0.25}
+    ],
+    "selection_rule": {
+      "high_fidelity": "Largest pilot 10th-percentile minimum margin under the primary specification.",
+      "moderate_evidence": "Positive-margin configuration whose median minimum margin is closest to score slack plus 0.015; ties use the smaller configuration id.",
+      "degraded": "Smallest pilot 90th-percentile minimum margin under the primary specification.",
+      "target_data_used": false
+    }
+  },
+  "claims": {
+    "target_population": "Equal mixture of cover type 2 and all other registered cover types.",
+    "minimum_reliability": 0.8,
+    "reliability_interpretation": "At least four in five independent full-pipeline releases satisfy every primary requirement.",
+    "total_alpha": 0.05,
+    "named_release_error_share": 0.9,
+    "direct_target_error_fraction": 0.8,
+    "primary_degradation_budget": 0.06,
+    "strict_degradation_budget": 0.04,
+    "permissive_degradation_budget": 0.08,
+    "absolute_ceilings": {
+      "classification_error": 0.42,
+      "brier": 0.3,
+      "normalized_cost5x": 0.22
+    },
+    "score_slack_grid": [0.035, 0.04, 0.045, 0.05],
+    "score_slack_selection": "Choose the smallest common slack whose projected invalid-score allowance is at most 0.04 on the sealed target; break ties by the smaller slack. The practical limits do not change.",
+    "registered_configurations": 3,
+    "audit_releases": {
+      "high_fidelity": 100,
+      "moderate_evidence": 300,
+      "degraded": 100
+    },
+    "release_seed_bases": {
+      "high_fidelity": 2026120000,
+      "moderate_evidence": 2026130000,
+      "degraded": 2026140000
+    },
+    "headline_rule": "The primary specification alone determines the headline decision. Strict and permissive limits are sensitivity analyses. Direct and named bounds are both reported; no uncorrected maximum is used.",
+    "desired_but_not_assumed_pattern": "High fidelity validates under both modes; moderate evidence validates only under direct shared-target inference; degraded is unresolved or violates at least one requirement. This pattern is a design target, not a condition for reporting."
+  }
+}

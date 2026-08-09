@@ -1,0 +1,50 @@
+{
+  "amendment_version": "1.0",
+  "amended_on": "2026-08-02",
+  "parent_registry": "registries/proxyguard_secondary_mushroom_partition_v2.json",
+  "parent_registry_sha256": "684a8ec55e1895ef765614f431d8350c87a8168498c011c79844105fcb457b20",
+  "trigger": {
+    "stage": "development-only pilot",
+    "completed_pilot_artifact": false,
+    "sealed_audit_opened": false,
+    "attempts": [
+      {
+        "infrastructure_ceiling_seconds": 600,
+        "result": "terminated before AIM fit completed"
+      },
+      {
+        "infrastructure_ceiling_seconds": 1800,
+        "result": "terminated before AIM fit completed"
+      }
+    ]
+  },
+  "reason": "The registered AIM configuration did not complete a development fit within either infrastructure allowance. No pilot artifact was produced and the sealed 10000-record reserve remained unopened. The replacement is a fully specified pure-DP categorical generator that is computationally feasible and supports the same conditional post-processing reliability claim.",
+  "mechanism_changes": {
+    "name": "DP class-conditional categorical sampler, epsilon=20",
+    "generator_type": "dp_class_conditional_categorical",
+    "privacy_claim": "One pure epsilon-DP fit of a class-conditional categorical model followed by repeated post-processing samples; reliability is conditional on this fitted private generator.",
+    "epsilon": 20.0,
+    "delta": 0.0,
+    "vector_l1_sensitivity": 18,
+    "post_noise_pseudocount": 1.0
+  },
+  "removed_mechanism_keys": [
+    "degree",
+    "max_model_size",
+    "num_marginals",
+    "max_cells"
+  ],
+  "unchanged": [
+    "dataset and record partition",
+    "development and audit positions",
+    "source and proxy learners",
+    "pilot and confirmation seeds",
+    "synthetic release size",
+    "registered losses and loss bounds",
+    "pilot-derived cutoff rule and direct slacks",
+    "minimum mechanism reliability",
+    "error budgets and decision rules"
+  ],
+  "privacy_accounting": "The released noisy vector contains the class histogram and one feature-by-class contingency table for each of 17 categorical features. One record changes one cell in each of 18 tables, giving L1 sensitivity 18. Independent Laplace noise with scale 18/epsilon is added to every count. Clipping, smoothing, and all release draws are post-processing.",
+  "sealed_audit_opened": false
+}

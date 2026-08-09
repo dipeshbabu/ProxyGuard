@@ -1,0 +1,37 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-02",
+  "stage": "pilot",
+  "analysis_status": "Exploratory shared-target stress test for the uncorrected favorable-score lower bound.",
+  "selection_rule": "Select a cell with uncorrected boundary false validation above 0.05 and corrected direct false validation at or below 0.05. Among eligible cells, choose the smallest release count, then the largest target size, then the largest slack. If no cell is eligible, report the pilot as unresolved and do not run a confirmation.",
+  "false_pass_diagnostic": {
+    "seed": 9932401,
+    "repetitions": 300,
+    "minimum_reliability": 0.8,
+    "total_alpha": 0.05,
+    "target_error_fraction": 0.9,
+    "lower_bound": 0.0,
+    "upper_bound": 1.0,
+    "tolerance": 0.5,
+    "valid_risk_low": 0.30,
+    "valid_risk_high": 0.40,
+    "invalid_risk_low": 0.5005,
+    "invalid_risk_high": 0.54,
+    "release_counts": [
+      250,
+      1000
+    ],
+    "target_sizes": [
+      100,
+      250,
+      500,
+      1000
+    ],
+    "normalized_slacks": [
+      0.005,
+      0.01,
+      0.02,
+      0.03
+    ]
+  }
+}

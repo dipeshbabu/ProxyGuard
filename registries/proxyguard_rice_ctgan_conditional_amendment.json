@@ -1,0 +1,34 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-03",
+  "stage": "pre_audit_conditional_generation_amendment",
+  "analysis_status": "Development-only CTGAN pilots with unconditional sampling did not preserve the class--feature relationship well enough to meet the fixed policy limits. The sealed target remained unopened. This amendment tests the package's registered class-conditional sampling interface while keeping the dataset partition, target reserve, policy limits, reliability target, and target-side analysis unchanged.",
+  "partition_registry": "registries/proxyguard_rice_ctgan_partition.json",
+  "partition_registry_sha256": "0a24d341973d845456083b0383e3064e46b0380c1ba21e7fdc95ab08e7d706d2",
+  "development_evidence_used": [
+    "outputs/proxyguard_rice_ctgan/pilot/pilot_release_risks.csv",
+    "outputs/proxyguard_rice_ctgan/pilot_v2/pilot_release_risks.csv"
+  ],
+  "target_opened": false,
+  "replacement_generator_search": {
+    "name": "CTGAN 0.12.1",
+    "synthetic_rows": 500,
+    "pilot_releases_per_configuration": 1,
+    "pilot_seed_base": 2026087000,
+    "configurations": [
+      {"id": "ctgan_cond_01", "training_rows": 500, "embedding_dim": 32, "generator_dim": [64, 64], "discriminator_dim": [64, 64], "batch_size": 500, "epochs": 20, "pac": 10, "conditional_class_sampling": true, "label_flip_probability": 0.0},
+      {"id": "ctgan_cond_02", "training_rows": 500, "embedding_dim": 32, "generator_dim": [64, 64], "discriminator_dim": [64, 64], "batch_size": 500, "epochs": 50, "pac": 10, "conditional_class_sampling": true, "label_flip_probability": 0.0},
+      {"id": "ctgan_cond_03", "training_rows": 500, "embedding_dim": 64, "generator_dim": [128, 128], "discriminator_dim": [128, 128], "batch_size": 500, "epochs": 50, "pac": 10, "conditional_class_sampling": true, "label_flip_probability": 0.0},
+      {"id": "ctgan_cond_04", "training_rows": 500, "embedding_dim": 32, "generator_dim": [64, 64], "discriminator_dim": [64, 64], "batch_size": 500, "epochs": 100, "pac": 10, "conditional_class_sampling": true, "label_flip_probability": 0.0},
+      {"id": "ctgan_cond_05", "training_rows": 300, "embedding_dim": 32, "generator_dim": [64, 64], "discriminator_dim": [64, 64], "batch_size": 300, "epochs": 50, "pac": 10, "conditional_class_sampling": true, "label_flip_probability": 0.0},
+      {"id": "ctgan_cond_06", "training_rows": 300, "embedding_dim": 32, "generator_dim": [64, 64], "discriminator_dim": [64, 64], "batch_size": 300, "epochs": 50, "pac": 10, "conditional_class_sampling": true, "label_flip_probability": 0.20}
+    ],
+    "selection_rule": {
+      "high_fidelity": "Configuration with the largest pilot 10th-percentile minimum margin.",
+      "moderate_evidence": "Positive-median-margin configuration closest to score slack plus 0.01; deterministic fallback uses the closest median margin.",
+      "degraded": "Configuration with the smallest pilot 90th-percentile minimum margin.",
+      "tie_break": "Lexicographically smaller configuration id.",
+      "target_data_used": false
+    }
+  }
+}
