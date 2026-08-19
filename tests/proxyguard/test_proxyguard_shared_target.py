@@ -19,13 +19,86 @@ from proxyguard.shared_target import (
     shared_target_conditional_witness_lower_bound,
     shared_target_polynomial_lower_bound,
     shared_target_reliability_lower_bound,
+    shared_target_smooth_conditional_lower_bound,
+    shared_target_smooth_conditional_mean_lower_bound,
     shared_target_tensor_polynomial_lower_bound,
     shared_target_witness_lower_bound,
+    smooth_invalid_release_score_ceiling,
     stratified_release_evidence,
     stratified_shared_target_conditional_witness_lower_bound,
     tensor_bernstein_design_minorant,
     tensor_bernstein_validity_minorant,
 )
+
+
+def test_smooth_target_concentration_can_improve_on_markov() -> None:
+    losses = np.zeros((2_000, 200, 1), dtype=float)
+
+    smooth = shared_target_smooth_conditional_lower_bound(
+        losses,
+        tolerances=[0.8],
+        slacks=[0.05],
+        ramp_widths=[0.6],
+        error_rate=0.05,
+        target_error_fraction=0.5,
+    )
+    expectation_only = shared_target_conditional_witness_lower_bound(
+        losses,
+        tolerances=[0.8],
+        slacks=[0.05],
+        ramp_widths=[0.6],
+        error_rate=0.05,
+        target_error_fraction=0.5,
+    )
+
+    assert smooth.target_contamination_allowance < smooth.markov_contamination_allowance
+    assert smooth.reliability_lower_bound > 0.8
+    assert expectation_only.reliability_lower_bound == 0.0
+
+    from_means = shared_target_smooth_conditional_mean_lower_bound(
+        losses.mean(axis=1),
+        target_records=200,
+        tolerances=[0.8],
+        slacks=[0.05],
+        ramp_widths=[0.6],
+        error_rate=0.05,
+        target_error_fraction=0.5,
+    )
+    assert from_means == smooth
+
+
+def test_smooth_invalid_ceiling_bounds_exact_bernoulli_ramp_mean() -> None:
+    target_records = 50
+    tolerance = 0.8
+    slack = 0.05
+    ramp = 0.6
+    cutoff = tolerance - slack
+    counts = np.arange(target_records + 1)
+    scores = np.clip((cutoff - counts / target_records) / ramp, 0.0, 1.0)
+    exact_mean = float(np.dot(binom.pmf(counts, target_records, tolerance), scores))
+
+    ceiling = smooth_invalid_release_score_ceiling(
+        target_records=target_records,
+        tolerances=[tolerance],
+        slacks=[slack],
+        ramp_widths=[ramp],
+        integration_bins=8192,
+    )
+
+    assert ceiling >= exact_mean
+    assert ceiling < 1.0
+
+
+def test_smooth_certificate_requires_positive_ramps() -> None:
+    losses = np.zeros((10, 20, 1), dtype=float)
+
+    with pytest.raises(ValueError, match="ramp width"):
+        shared_target_smooth_conditional_lower_bound(
+            losses,
+            tolerances=[0.8],
+            slacks=[0.05],
+            ramp_widths=[0.0],
+        )
 
 
 def test_block_witness_uses_two_axis_mcdiarmid_radius() -> None:

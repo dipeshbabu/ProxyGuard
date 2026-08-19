@@ -1,6 +1,7 @@
 Experiment,ClaimType,EvidenceClass,TargetLineage,PreAccessRegistry,ProjectWideUntouched,FormalGuarantee
 Release calibration and target-reuse studies,False release validation,Confirmatory simulation,Fresh simulated audit draws,Yes,Yes,Yes
 Mechanism calibration and planning studies,Mechanism validation and power,Confirmatory simulation,Fresh simulated audit draws,Yes,Yes,Yes
+Smooth target-concentration study,Structured contamination calibration and power,Confirmatory simulation,Fresh simulated audit draws,Yes,Yes,Yes
 Adaptive candidate stream,Sequential false validation,Confirmatory simulation,Fresh simulated batch each round,Yes,Yes,Yes
 Temporal site and schema proxies,Relative transfer,Descriptive real-data audit,Public benchmarks used earlier in project,Full-run settings only,No,No
 Repeated AIM releases,Relative transfer,Retrospective sensitivity,Existing public benchmark splits and releases,No,No,No
@@ -10,3 +11,4 @@ TabDDPM releases,Relative transfer,Registered descriptive audit,Public benchmark
 Public transformation screen,Relative transfer,Descriptive stress screen,Public benchmark targets used earlier in project,No,No,No
 Membership attack suite,Suite-conditional exposure,Registered descriptive audit,Developed releases and public record pools,Yes,No,No
 MAGIC sealed bootstrap mechanism,Relative and absolute requirements,Prospective real mechanism audit,"Uniform, record-disjoint unlabeled reserve from project-new dataset",Yes,Yes,Yes
+20 Newsgroups multinomial text mechanism,Absolute error Brier and decision-cost requirements,Prospective non-tabular mechanism audit,"Official test subset first loaded after registry; iid target draw with replacement",Yes,Yes,Yes

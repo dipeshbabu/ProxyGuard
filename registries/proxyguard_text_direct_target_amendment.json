@@ -1,0 +1,26 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-17",
+  "analysis_status": "Pre-audit feasibility amendment frozen before loading the official test subset.",
+  "audit_registry": "registries/proxyguard_text_direct_audit.json",
+  "audit_registry_sha256": "b4e6d353fb48e699c7e42fa272168700b40f7605e636e05012b0c46fd207ac36",
+  "reason": "The frozen best-case planner showed that 2,000 target draws could not validate at reliability 0.95. The target size was increased using only the registered limits, slacks, and error allocation.",
+  "original_target_records": 2000,
+  "replacement_target_records": 4000,
+  "replacement_direct_plan": {
+    "minimum_target_records": 2401,
+    "minimum_releases": 126,
+    "contamination_allowance": 0.0004139715359080046
+  },
+  "unchanged": [
+    "dataset and target population",
+    "target sampling seed",
+    "source and planning records",
+    "generator configurations",
+    "release counts and seeds",
+    "losses, limits, slacks, and reliability target",
+    "error allocations",
+    "headline decision rule"
+  ],
+  "test_subset_loaded_before_amendment": false
+}

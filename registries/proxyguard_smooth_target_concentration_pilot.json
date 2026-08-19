@@ -1,0 +1,25 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-17",
+  "stage": "pilot",
+  "analysis_status": "Exploratory planning study for the smooth shared-target contamination certificate. No confirmatory seed is used here.",
+  "selection_rule": "Among cells with smooth-certificate boundary validation at or below 0.05, maximize its pilot power at reliability 0.95 subject to both expectation-only certificates having power at most 0.10. Break ties by smaller target size, then fewer releases, then narrower ramp. If no cell qualifies, do not run a confirmation.",
+  "smooth_target_concentration": {
+    "seed": 8172601,
+    "repetitions": 200,
+    "minimum_reliability": 0.8,
+    "true_reliabilities": [0.8, 0.9, 0.95, 0.99],
+    "total_alpha": 0.05,
+    "target_error_fraction": 0.5,
+    "lower_bound": 0.0,
+    "upper_bound": 1.0,
+    "tolerance": 0.8,
+    "slack": 0.05,
+    "valid_risk": 0.1,
+    "invalid_risk": 0.8,
+    "release_counts": [500, 1000, 2000],
+    "target_sizes": [100, 150, 200, 250, 300],
+    "ramp_widths": [0.5, 0.55, 0.6, 0.65],
+    "integration_bins": 4096
+  }
+}

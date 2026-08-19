@@ -1,0 +1,27 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-17",
+  "stage": "confirmation",
+  "analysis_status": "Confirmatory calibration and power comparison for the smooth shared-target concentration certificate.",
+  "pilot_registry": "registries/proxyguard_smooth_target_concentration_pilot_v2.json",
+  "pilot_registry_sha256": "2dd5aa5f2cdd615e21b41e580496327dcb34513becc3a044a63ef260c6088e16",
+  "selection_rule": "Applied the frozen second-pilot rule. The selected cell was the first eligible design after ordering by releases, target size, descending smooth-certificate power, and ramp width.",
+  "smooth_target_concentration": {
+    "seed": 8172699,
+    "repetitions": 2000,
+    "minimum_reliability": 0.8,
+    "true_reliabilities": [0.8, 0.95, 0.99],
+    "total_alpha": 0.05,
+    "target_error_fraction": 0.5,
+    "lower_bound": 0.0,
+    "upper_bound": 1.0,
+    "tolerance": 0.8,
+    "slack": 0.05,
+    "valid_risk": 0.1,
+    "invalid_risk": 0.8,
+    "selected_release_count": 500,
+    "selected_target_records": 200,
+    "selected_ramp_width": 0.6,
+    "integration_bins": 4096
+  }
+}

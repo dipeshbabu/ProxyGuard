@@ -1,0 +1,193 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-17",
+  "analysis_status": "Prospective non-tabular partition and development plan frozen before the official test subset was loaded.",
+  "dataset": {
+    "name": "20 Newsgroups",
+    "source": "scikit-learn fetch_20newsgroups",
+    "categories": [
+      "rec.sport.hockey",
+      "sci.space"
+    ],
+    "remove": [
+      "headers",
+      "footers",
+      "quotes"
+    ],
+    "data_home": "outputs/proxyguard_text_data_v2"
+  },
+  "partition": {
+    "development_subset": "official train",
+    "target_population": "official test subset restricted to the registered categories",
+    "expected_training_records": 1193,
+    "development_split_seed": 26081701,
+    "source_records": 895,
+    "planning_records": 298,
+    "target_sampling": "iid with replacement from the untouched official test subset",
+    "target_sampling_seed": 26081702,
+    "target_records": 2000
+  },
+  "vectorizer": {
+    "type": "CountVectorizer",
+    "max_features": 500,
+    "min_df": 2,
+    "stop_words": "english",
+    "lowercase": true,
+    "fit_scope": "source records only"
+  },
+  "source_procedure": {
+    "type": "MultinomialNB",
+    "alpha": 1.0,
+    "decision_threshold": 0.5,
+    "fit_scope": "source records only"
+  },
+  "generator_search": {
+    "name": "class-conditional multinomial unigram text generator",
+    "scope": "The class-conditional token model is fit once on source records; every mechanism draw samples a new labeled text-feature release and refits MultinomialNB.",
+    "token_smoothing": 0.5,
+    "minimum_document_tokens": 10,
+    "maximum_document_tokens": 150,
+    "pilot_releases_per_configuration": 20,
+    "pilot_seed_base": 26082000,
+    "moderate_target_score_margin": 0.003,
+    "selection_rule": "High signal maximizes the 10th percentile minimum score margin; degraded minimizes the 90th percentile; among remaining configurations with nonnegative median margin, moderate is closest to 0.003. Ties use configuration id.",
+    "configurations": [
+      {
+        "id": "text_01",
+        "synthetic_rows": 4000,
+        "temperature": 1.0,
+        "label_flip_probability": 0.0
+      },
+      {
+        "id": "text_02",
+        "synthetic_rows": 2000,
+        "temperature": 1.0,
+        "label_flip_probability": 0.0
+      },
+      {
+        "id": "text_03",
+        "synthetic_rows": 1000,
+        "temperature": 1.0,
+        "label_flip_probability": 0.0
+      },
+      {
+        "id": "text_04",
+        "synthetic_rows": 500,
+        "temperature": 1.0,
+        "label_flip_probability": 0.0
+      },
+      {
+        "id": "text_05",
+        "synthetic_rows": 1000,
+        "temperature": 1.1,
+        "label_flip_probability": 0.0
+      },
+      {
+        "id": "text_06",
+        "synthetic_rows": 500,
+        "temperature": 1.1,
+        "label_flip_probability": 0.0
+      },
+      {
+        "id": "text_07",
+        "synthetic_rows": 300,
+        "temperature": 1.2,
+        "label_flip_probability": 0.0
+      },
+      {
+        "id": "text_08",
+        "synthetic_rows": 500,
+        "temperature": 1.2,
+        "label_flip_probability": 0.08
+      },
+      {
+        "id": "text_09",
+        "synthetic_rows": 300,
+        "temperature": 1.35,
+        "label_flip_probability": 0.15
+      }
+    ]
+  },
+  "claims": {
+    "losses": [
+      "Error",
+      "Brier",
+      "Cost3x"
+    ],
+    "loss_bounds": [
+      [
+        0.0,
+        1.0
+      ],
+      [
+        0.0,
+        1.0
+      ],
+      [
+        0.0,
+        1.0
+      ]
+    ],
+    "specification_envelope": {
+      "strict": {
+        "degradation_budgets": [
+          0.03,
+          0.02,
+          0.03
+        ],
+        "absolute_ceilings": [
+          0.2,
+          0.15,
+          0.2
+        ]
+      },
+      "primary": {
+        "degradation_budgets": [
+          0.04,
+          0.03,
+          0.04
+        ],
+        "absolute_ceilings": [
+          0.25,
+          0.18,
+          0.25
+        ]
+      },
+      "permissive": {
+        "degradation_budgets": [
+          0.05,
+          0.04,
+          0.05
+        ],
+        "absolute_ceilings": [
+          0.3,
+          0.22,
+          0.3
+        ]
+      }
+    },
+    "score_slacks": [
+      0.03,
+      0.02,
+      0.03
+    ],
+    "minimum_reliability": 0.95,
+    "total_alpha": 0.05,
+    "named_release_error_share": 0.5,
+    "direct_target_error_fraction": 0.9,
+    "registered_configurations": 3,
+    "smooth_ramp_fraction_of_cutoff": 0.5,
+    "audit_releases": {
+      "high_signal": 250,
+      "moderate_evidence": 500,
+      "degraded": 250
+    },
+    "release_seed_bases": {
+      "high_signal": 26100000,
+      "moderate_evidence": 26200000,
+      "degraded": 26300000
+    },
+    "headline_rule": "The primary specification alone determines the headline decision. A direct-only result requires named LCB <= 0.95 < direct LCB for the prospectively selected moderate-evidence configuration. Strict and permissive policies are registered sensitivity descriptions, not additional headline tests."
+  },
+  "target_subset_loaded_before_registry": false
+}

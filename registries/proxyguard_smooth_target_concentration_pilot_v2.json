@@ -1,0 +1,27 @@
+{
+  "registry_version": "1.0",
+  "frozen_on": "2026-08-17",
+  "stage": "pilot",
+  "analysis_status": "Second exploratory planning study. The first pilot found no eligible separation at reliability 0.95; this registry asks whether smooth target concentration is informative at reliability 0.99 while expectation-only corrections remain uninformative.",
+  "prior_pilot_registry": "registries/proxyguard_smooth_target_concentration_pilot.json",
+  "prior_pilot_registry_sha256": "aa996e92257cb48ef35036c1bd59249fbc57821159a0a402fe15c977997aee0f",
+  "selection_rule": "Require boundary validation at or below 0.05, smooth-certificate power at reliability 0.99 of at least 0.80, and power at most 0.10 for both expectation-only certificates. Select the fewest releases, then the smallest target, then the largest smooth-certificate power, then the narrower ramp. If no cell qualifies, do not run a confirmation.",
+  "smooth_target_concentration": {
+    "seed": 8172602,
+    "repetitions": 300,
+    "minimum_reliability": 0.8,
+    "true_reliabilities": [0.8, 0.95, 0.99],
+    "total_alpha": 0.05,
+    "target_error_fraction": 0.5,
+    "lower_bound": 0.0,
+    "upper_bound": 1.0,
+    "tolerance": 0.8,
+    "slack": 0.05,
+    "valid_risk": 0.1,
+    "invalid_risk": 0.8,
+    "release_counts": [250, 500, 1000],
+    "target_sizes": [150, 200, 250],
+    "ramp_widths": [0.55, 0.6, 0.65],
+    "integration_bins": 4096
+  }
+}

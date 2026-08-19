@@ -45,6 +45,7 @@ from proxyguard import (
     shared_target_block_witness_lower_bound,
     shared_target_conditional_mean_lower_bound,
     shared_target_conditional_witness_lower_bound,
+    shared_target_smooth_conditional_lower_bound,
 )
 ```
 
@@ -70,6 +71,9 @@ python -m scripts.proxyguard.run_proxyguard_direct_multirequirement \
 python -m scripts.proxyguard.run_proxyguard_false_pass_diagnostic \
   --registry registries/proxyguard_false_pass_diagnostic_confirmatory.json \
   --output-root outputs/proxyguard_false_pass_diagnostic_confirmatory
+python -m scripts.proxyguard.run_proxyguard_smooth_target_concentration \
+  --registry registries/proxyguard_smooth_target_concentration_confirmatory.json \
+  --output-root outputs/proxyguard_smooth_target_concentration_confirmatory
 python -m scripts.proxyguard.build_direct_multirequirement_assets
 python -m scripts.proxyguard.run_proxyguard_stratified_subgroup_study
 ```
@@ -121,6 +125,10 @@ uv run --with ctgan python -m scripts.proxyguard.run_proxyguard_rice_tvae \
   --audit-registry registries/proxyguard_rice_tvae_audit.json \
   --generation-root outputs/proxyguard_rice_tvae/releases_v3 \
   --audit-root outputs/proxyguard_rice_tvae/audit audit
+python -m scripts.proxyguard.run_proxyguard_text_direct_audit pilot
+python -m scripts.proxyguard.run_proxyguard_text_direct_audit freeze
+python -m scripts.proxyguard.run_proxyguard_text_direct_audit generate
+python -m scripts.proxyguard.run_proxyguard_text_direct_audit audit
 python scripts/proxyguard/audit_proxyguard_target_lineage.py
 ```
 

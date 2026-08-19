@@ -133,6 +133,27 @@ class ConditionalSharedTargetResult:
 
 
 @dataclass(frozen=True)
+class SmoothConditionalSharedTargetResult:
+    """Conditional reliability certificate with smooth target concentration."""
+
+    reliability_lower_bound: float
+    conditional_score_lower_bound: float
+    conditional_score_mean: float
+    invalid_release_score_ceiling: float
+    target_concentration_radius: float
+    target_contamination_allowance: float
+    markov_contamination_allowance: float
+    target_lipschitz_per_record: float
+    releases: int
+    target_records: int
+    requirements: int
+    integration_bins: int
+    error_rate: float
+    release_error_rate: float
+    target_error_rate: float
+
+
+@dataclass(frozen=True)
 class ConditionalSharedTargetPlan:
     """Best-case resolution limits for the binary shared-target score."""
 
@@ -1954,6 +1975,405 @@ def shared_target_conditional_witness_lower_bound(
         error_rate=error_rate,
         target_error_fraction=target_error_fraction,
         mechanisms=mechanisms,
+    )
+
+
+def smooth_invalid_release_score_ceiling(
+    *,
+    target_records: int,
+    tolerances: float | Sequence[float],
+    slacks: float | Sequence[float],
+    ramp_widths: float | Sequence[float],
+    lower_bounds: float | Sequence[float] = 0.0,
+    upper_bounds: float | Sequence[float] = 1.0,
+    integration_bins: int = 4096,
+) -> float:
+    """Upper-bound the expected ramp score of an invalid release.
+
+    A ramp factor is an average of hard lower-tail indicators over its ramp
+    interval. For a requirement violated at its registered limit, integrating
+    the bounded-loss Chernoff tail therefore bounds its expected ramp factor.
+    The implementation uses a right Riemann sum, which is conservative because
+    the lower-tail bound increases toward the scoring cutoff.
+    """
+
+    if target_records < 1:
+        raise ValueError("target_records must be positive.")
+    if integration_bins < 1:
+        raise ValueError("integration_bins must be positive.")
+
+    vector_sizes = [
+        np.asarray(values).size
+        for values in (
+            tolerances,
+            slacks,
+            ramp_widths,
+            lower_bounds,
+            upper_bounds,
+        )
+        if np.asarray(values).ndim > 0
+    ]
+    requirements = max(vector_sizes, default=1)
+    tolerances_array = _as_requirement_vector(
+        tolerances,
+        requirements,
+        name="tolerances",
+    )
+    slacks_array = _as_requirement_vector(slacks, requirements, name="slacks")
+    ramps_array = _as_requirement_vector(
+        ramp_widths,
+        requirements,
+        name="ramp_widths",
+    )
+    lower_array = _as_requirement_vector(
+        lower_bounds,
+        requirements,
+        name="lower_bounds",
+    )
+    upper_array = _as_requirement_vector(
+        upper_bounds,
+        requirements,
+        name="upper_bounds",
+    )
+    if np.any(lower_array >= upper_array):
+        raise ValueError("Every lower bound must be smaller than its upper bound.")
+    if np.any(slacks_array <= 0.0):
+        raise ValueError("Every slack must be positive.")
+    if np.any(ramps_array <= 0.0):
+        raise ValueError("Every ramp width must be positive.")
+
+    cutoffs = tolerances_array - slacks_array
+    if (
+        np.any(cutoffs - ramps_array < lower_array)
+        or np.any(cutoffs >= tolerances_array)
+        or np.any(tolerances_array >= upper_array)
+    ):
+        raise ValueError(
+            "Each requirement must satisfy lower <= tolerance - slack - ramp "
+            "< tolerance - slack < tolerance < upper."
+        )
+
+    return _smooth_invalid_release_score_ceiling_cached(
+        target_records,
+        tuple(float(value) for value in tolerances_array),
+        tuple(float(value) for value in slacks_array),
+        tuple(float(value) for value in ramps_array),
+        tuple(float(value) for value in lower_array),
+        tuple(float(value) for value in upper_array),
+        integration_bins,
+    )
+
+
+@lru_cache(maxsize=512)
+def _smooth_invalid_release_score_ceiling_cached(
+    target_records: int,
+    tolerances: tuple[float, ...],
+    slacks: tuple[float, ...],
+    ramp_widths: tuple[float, ...],
+    lower_bounds: tuple[float, ...],
+    upper_bounds: tuple[float, ...],
+    integration_bins: int,
+) -> float:
+    requirements = len(tolerances)
+    tolerances_array = np.asarray(tolerances, dtype=float)
+    slacks_array = np.asarray(slacks, dtype=float)
+    ramps_array = np.asarray(ramp_widths, dtype=float)
+    lower_array = np.asarray(lower_bounds, dtype=float)
+    upper_array = np.asarray(upper_bounds, dtype=float)
+    cutoffs = tolerances_array - slacks_array
+    widths = upper_array - lower_array
+    fractions = np.arange(1, integration_bins + 1, dtype=float) / integration_bins
+    ceilings: list[float] = []
+    for index in range(requirements):
+        left = cutoffs[index] - ramps_array[index]
+        points = left + fractions * ramps_array[index]
+        normalized_points = (points - lower_array[index]) / widths[index]
+        normalized_tolerance = (
+            tolerances_array[index] - lower_array[index]
+        ) / widths[index]
+        tails = np.asarray(
+            [
+                np.exp(
+                    -target_records
+                    * _bernoulli_kl(float(point), float(normalized_tolerance))
+                )
+                for point in normalized_points
+            ],
+            dtype=float,
+        )
+        numerical_guard = 128.0 * np.finfo(float).eps
+        ceilings.append(float(min(1.0, tails.mean() + numerical_guard)))
+    return max(ceilings)
+
+
+def shared_target_smooth_conditional_lower_bound(
+    losses: np.ndarray,
+    *,
+    tolerances: float | Sequence[float],
+    slacks: float | Sequence[float],
+    ramp_widths: float | Sequence[float],
+    lower_bounds: float | Sequence[float] = 0.0,
+    upper_bounds: float | Sequence[float] = 1.0,
+    error_rate: float = 0.05,
+    target_error_fraction: float = 0.5,
+    mechanisms: int = 1,
+    integration_bins: int = 4096,
+) -> SmoothConditionalSharedTargetResult:
+    """Lower-bound reliability with a smooth shared-target score.
+
+    Conditional on the target, a bounded-KL inversion controls the mean ramp
+    score across independent releases. The invalid-release contribution is a
+    Lipschitz function of the independent target records. McDiarmid's
+    inequality therefore gives an additive target-side allowance instead of
+    the expectation-only Markov conversion.
+    """
+
+    array = np.asarray(losses, dtype=float)
+    if array.ndim != 3:
+        raise ValueError(
+            "losses must have shape (releases, target_records, requirements)."
+        )
+    releases, target_records, requirements = array.shape
+    if releases < 1 or target_records < 1 or requirements < 1:
+        raise ValueError(
+            "losses must have non-empty release, target, and requirement axes."
+        )
+    if not np.isfinite(array).all():
+        raise ValueError("losses must contain only finite values.")
+    if mechanisms < 1:
+        raise ValueError("mechanisms must be positive.")
+    if not 0.0 < error_rate < 1.0:
+        raise ValueError("error_rate must lie strictly between zero and one.")
+    if not 0.0 < target_error_fraction < 1.0:
+        raise ValueError(
+            "target_error_fraction must lie strictly between zero and one."
+        )
+
+    tolerances_array = _as_requirement_vector(
+        tolerances,
+        requirements,
+        name="tolerances",
+    )
+    slacks_array = _as_requirement_vector(slacks, requirements, name="slacks")
+    ramps_array = _as_requirement_vector(
+        ramp_widths,
+        requirements,
+        name="ramp_widths",
+    )
+    lower_array = _as_requirement_vector(
+        lower_bounds,
+        requirements,
+        name="lower_bounds",
+    )
+    upper_array = _as_requirement_vector(
+        upper_bounds,
+        requirements,
+        name="upper_bounds",
+    )
+    if np.any(lower_array >= upper_array):
+        raise ValueError("Every lower bound must be smaller than its upper bound.")
+    if np.any(slacks_array <= 0.0):
+        raise ValueError("Every slack must be positive.")
+    if np.any(ramps_array <= 0.0):
+        raise ValueError("Every ramp width must be positive.")
+    cutoffs = tolerances_array - slacks_array
+    if (
+        np.any(cutoffs - ramps_array < lower_array)
+        or np.any(cutoffs >= tolerances_array)
+        or np.any(tolerances_array >= upper_array)
+    ):
+        raise ValueError(
+            "Each requirement must satisfy lower <= tolerance - slack - ramp "
+            "< tolerance - slack < tolerance < upper."
+        )
+    numerical_tolerance = 1e-12
+    if np.any(array < lower_array.reshape(1, 1, -1) - numerical_tolerance) or np.any(
+        array > upper_array.reshape(1, 1, -1) + numerical_tolerance
+    ):
+        raise ValueError("Observed losses fall outside their registered bounds.")
+
+    release_means = array.mean(axis=1)
+    factors = np.clip(
+        (cutoffs.reshape(1, -1) - release_means) / ramps_array.reshape(1, -1),
+        0.0,
+        1.0,
+    )
+    scores = factors.prod(axis=1)
+    score_mean = float(scores.mean())
+
+    target_error_rate = error_rate * target_error_fraction / mechanisms
+    release_error_rate = error_rate * (1.0 - target_error_fraction) / mechanisms
+    score_lower = bounded_kl_lower_bound(
+        score_mean,
+        releases,
+        release_error_rate,
+    )
+    invalid_ceiling = smooth_invalid_release_score_ceiling(
+        target_records=target_records,
+        tolerances=tolerances_array,
+        slacks=slacks_array,
+        ramp_widths=ramps_array,
+        lower_bounds=lower_array,
+        upper_bounds=upper_array,
+        integration_bins=integration_bins,
+    )
+
+    widths = upper_array - lower_array
+    lipschitz_per_record = min(
+        1.0,
+        float(np.sum(widths / ramps_array) / target_records),
+    )
+    target_radius = float(
+        lipschitz_per_record
+        * np.sqrt(0.5 * target_records * log(1.0 / target_error_rate))
+    )
+    contamination_allowance = min(1.0, invalid_ceiling + target_radius)
+    markov_allowance = min(1.0, invalid_ceiling / target_error_rate)
+    reliability_lower = max(0.0, score_lower - contamination_allowance)
+    return SmoothConditionalSharedTargetResult(
+        reliability_lower_bound=float(min(1.0, reliability_lower)),
+        conditional_score_lower_bound=score_lower,
+        conditional_score_mean=score_mean,
+        invalid_release_score_ceiling=invalid_ceiling,
+        target_concentration_radius=target_radius,
+        target_contamination_allowance=contamination_allowance,
+        markov_contamination_allowance=markov_allowance,
+        target_lipschitz_per_record=lipschitz_per_record,
+        releases=releases,
+        target_records=target_records,
+        requirements=requirements,
+        integration_bins=integration_bins,
+        error_rate=error_rate,
+        release_error_rate=release_error_rate,
+        target_error_rate=target_error_rate,
+    )
+
+
+def shared_target_smooth_conditional_mean_lower_bound(
+    release_means: np.ndarray,
+    *,
+    target_records: int,
+    tolerances: float | Sequence[float],
+    slacks: float | Sequence[float],
+    ramp_widths: float | Sequence[float],
+    lower_bounds: float | Sequence[float] = 0.0,
+    upper_bounds: float | Sequence[float] = 1.0,
+    error_rate: float = 0.05,
+    target_error_fraction: float = 0.5,
+    mechanisms: int = 1,
+    integration_bins: int = 4096,
+) -> SmoothConditionalSharedTargetResult:
+    """Evaluate the smooth certificate from shared-target release means."""
+
+    means = np.asarray(release_means, dtype=float)
+    if means.ndim != 2:
+        raise ValueError("release_means must have shape (releases, requirements).")
+    releases, requirements = means.shape
+    if releases < 1 or requirements < 1:
+        raise ValueError("release_means must have non-empty axes.")
+    if target_records < 1:
+        raise ValueError("target_records must be positive.")
+    if not np.isfinite(means).all():
+        raise ValueError("release_means must contain only finite values.")
+    if mechanisms < 1:
+        raise ValueError("mechanisms must be positive.")
+    if not 0.0 < error_rate < 1.0:
+        raise ValueError("error_rate must lie strictly between zero and one.")
+    if not 0.0 < target_error_fraction < 1.0:
+        raise ValueError(
+            "target_error_fraction must lie strictly between zero and one."
+        )
+
+    tolerances_array = _as_requirement_vector(
+        tolerances,
+        requirements,
+        name="tolerances",
+    )
+    slacks_array = _as_requirement_vector(slacks, requirements, name="slacks")
+    ramps_array = _as_requirement_vector(
+        ramp_widths,
+        requirements,
+        name="ramp_widths",
+    )
+    lower_array = _as_requirement_vector(
+        lower_bounds,
+        requirements,
+        name="lower_bounds",
+    )
+    upper_array = _as_requirement_vector(
+        upper_bounds,
+        requirements,
+        name="upper_bounds",
+    )
+    if np.any(lower_array >= upper_array):
+        raise ValueError("Every lower bound must be smaller than its upper bound.")
+    if np.any(slacks_array <= 0.0):
+        raise ValueError("Every slack must be positive.")
+    if np.any(ramps_array <= 0.0):
+        raise ValueError("Every ramp width must be positive.")
+    cutoffs = tolerances_array - slacks_array
+    if (
+        np.any(cutoffs - ramps_array < lower_array)
+        or np.any(cutoffs >= tolerances_array)
+        or np.any(tolerances_array >= upper_array)
+    ):
+        raise ValueError(
+            "Each requirement must satisfy lower <= tolerance - slack - ramp "
+            "< tolerance - slack < tolerance < upper."
+        )
+    numerical_tolerance = 1e-12
+    if np.any(means < lower_array.reshape(1, -1) - numerical_tolerance) or np.any(
+        means > upper_array.reshape(1, -1) + numerical_tolerance
+    ):
+        raise ValueError("Release means fall outside their registered bounds.")
+
+    factors = np.clip(
+        (cutoffs.reshape(1, -1) - means) / ramps_array.reshape(1, -1),
+        0.0,
+        1.0,
+    )
+    scores = factors.prod(axis=1)
+    score_mean = float(scores.mean())
+    target_error_rate = error_rate * target_error_fraction / mechanisms
+    release_error_rate = error_rate * (1.0 - target_error_fraction) / mechanisms
+    score_lower = bounded_kl_lower_bound(score_mean, releases, release_error_rate)
+    invalid_ceiling = smooth_invalid_release_score_ceiling(
+        target_records=target_records,
+        tolerances=tolerances_array,
+        slacks=slacks_array,
+        ramp_widths=ramps_array,
+        lower_bounds=lower_array,
+        upper_bounds=upper_array,
+        integration_bins=integration_bins,
+    )
+    widths = upper_array - lower_array
+    lipschitz_per_record = min(
+        1.0,
+        float(np.sum(widths / ramps_array) / target_records),
+    )
+    target_radius = float(
+        lipschitz_per_record
+        * np.sqrt(0.5 * target_records * log(1.0 / target_error_rate))
+    )
+    contamination_allowance = min(1.0, invalid_ceiling + target_radius)
+    markov_allowance = min(1.0, invalid_ceiling / target_error_rate)
+    reliability_lower = max(0.0, score_lower - contamination_allowance)
+    return SmoothConditionalSharedTargetResult(
+        reliability_lower_bound=float(min(1.0, reliability_lower)),
+        conditional_score_lower_bound=score_lower,
+        conditional_score_mean=score_mean,
+        invalid_release_score_ceiling=invalid_ceiling,
+        target_concentration_radius=target_radius,
+        target_contamination_allowance=contamination_allowance,
+        markov_contamination_allowance=markov_allowance,
+        target_lipschitz_per_record=lipschitz_per_record,
+        releases=releases,
+        target_records=target_records,
+        requirements=requirements,
+        integration_bins=integration_bins,
+        error_rate=error_rate,
+        release_error_rate=release_error_rate,
+        target_error_rate=target_error_rate,
     )
 
 
